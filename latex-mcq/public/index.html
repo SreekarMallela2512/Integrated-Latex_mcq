@@ -641,8 +641,7 @@ form.addEventListener('submit', async function(event) {
     pyqType: formData.get('pyqType'),
     shift: formData.get('shift') || 'N/A',
     year: formData.get('year') ? parseInt(formData.get('year')) : null,
-    examDate: formData.get('examDate') || null,
-     autoClassified: wasAutoClassified // Add this
+    examDate: formData.get('examDate') || null
   };
 
   try {
@@ -678,7 +677,6 @@ form.addEventListener('submit', async function(event) {
   } catch (error) {
     alert('Error: ' + error.message);
   }
-   wasAutoClassified = false;
 });
     // Update the loadQuestions function in index.html to show creation date/time
 
@@ -920,9 +918,7 @@ function applyFilters() {
 function displayFilteredQuestions() {
   const list = document.getElementById('questionList');
   list.innerHTML = '';
-const classificationBadge = q.autoClassified ? 
-  '<span class="badge auto-classified">🤖 Auto-classified</span>' : 
-  '';
+
   if (filteredQuestions.length === 0) {
     list.innerHTML = '<p>No questions match your search/filters.</p>';
     return;
@@ -987,10 +983,8 @@ if (q.pyqType && q.pyqType !== 'Not PYQ') {
       <strong>Q${i + 1}:</strong> ${questionHtml}<br/>
       <ul>${optionsHtml}</ul>
       <div class="question-meta">
-  <em>Subject:</em> ${q.subject}, 
-  <em>Topic:</em> ${q.topic}, 
-  <em>Difficulty:</em> ${q.difficulty} ${classificationBadge}
-</div>
+        <em>Subject:</em> ${q.subject}, <em>Topic:</em> ${q.topic}, <em>Difficulty:</em> ${q.difficulty}
+      </div>
       ${pyqInfo}
       ${creatorInfo}
       ${actionButtons}
@@ -1384,244 +1378,7 @@ function updateUserInterface() {
   }
 }
 
-// Add this near the top of your script section
-const CLASSIFIER_API_URL = 'http://localhost:8000';
-let wasAutoClassified = false;
-// Function to classify difficulty using the external API
-async function classifyDifficulty(question) {
-  try {
-    const response = await fetch(`${CLASSIFIER_API_URL}/classify`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        session_id: `mcq-${currentUser.username}-${Date.now()}`,
-        question: question
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error('Classification failed');
-    }
-
-    const data = await response.json();
-     wasAutoClassified = true; // Set flag
-    return data.difficulty.toLowerCase();
-  } catch (error) {
-    console.error('Error classifying difficulty:', error);
-    return null;
-  }
-}
-
-// Add auto-classification status indicator
-function addClassificationStatus() {
-  const difficultyLabel = document.querySelector('label[for="difficulty"]');
-  if (!document.getElementById('classificationStatus')) {
-    difficultyLabel.innerHTML = `
-      Difficulty: 
-      <span id="classificationStatus" style="font-size: 0.8em; color: #666;"></span>
-      <button type="button" onclick="reclassifyDifficulty()" style="margin-left: 10px; padding: 2px 8px; font-size: 0.8em;">
-        🔄 Re-classify
-      </button>
-    `;
-  }
-}
-
-// Manual re-classification function
-async function reclassifyDifficulty() {
-  const question = document.getElementById('question').value;
-  if (!question || question.trim().length < 20) {
-    alert('Please enter a complete question first (at least 20 characters)');
-    return;
-  }
-
-  const difficultyStatus = document.getElementById('classificationStatus');
-  const difficultySelect = document.getElementById('difficulty');
-  
-  difficultyStatus.textContent = '(Classifying...)';
-  difficultyStatus.style.color = '#1976d2';
-  
-  const difficulty = await classifyDifficulty(question);
-  if (difficulty) {
-    difficultySelect.value = difficulty;
-    difficultyStatus.textContent = '(Auto-classified ✓)';
-    difficultyStatus.style.color = '#4caf50';
-    
-    // Visual feedback
-    difficultySelect.style.backgroundColor = '#e8f5e9';
-    setTimeout(() => {
-      difficultySelect.style.backgroundColor = '';
-    }, 2000);
-  } else {
-    difficultyStatus.textContent = '(Classification failed - select manually)';
-    difficultyStatus.style.color = '#f44336';
-  }
-}
-
-// Modify your existing renderLatex function
-const originalRenderLatex = renderLatex;
-let classificationTimeout;
-
-function renderLatex() {
-  // Call original render function
-  originalRenderLatex();
-  
-  // Clear previous classification timeout
-  clearTimeout(classificationTimeout);
-  
-  // Set up auto-classification
-  classificationTimeout = setTimeout(async () => {
-    const question = document.getElementById('question').value.trim();
-    
-    // Only classify if question is substantial enough
-    if (question.length > 30 && !editMode) {
-      const difficultyStatus = document.getElementById('classificationStatus');
-      if (difficultyStatus) {
-        difficultyStatus.textContent = '(Auto-classifying...)';
-        difficultyStatus.style.color = '#1976d2';
-      }
-      
-      const difficulty = await classifyDifficulty(question);
-      if (difficulty && document.getElementById('difficulty').value === '') {
-        document.getElementById('difficulty').value = difficulty;
-        
-        if (difficultyStatus) {
-          difficultyStatus.textContent = '(Auto-classified ✓)';
-          difficultyStatus.style.color = '#4caf50';
-        }
-        
-        // Visual feedback
-        const difficultySelect = document.getElementById('difficulty');
-        difficultySelect.style.backgroundColor = '#e8f5e9';
-        setTimeout(() => {
-          difficultySelect.style.backgroundColor = '';
-        }, 2000);
-      }
-    }
-  }, 1000); // Wait 1 second after user stops typing
-}
-
-// Add this to your window.onload function after updateUserInterface()
-window.onload = async () => {
-  try {
-    const response = await fetch('/auth/status');
-    const data = await response.json();
-    
-    if (!data.authenticated) {
-      window.location.href = '/login.html';
-      return;
-    }
-    
-    currentUser = data.user;
-    updateUserInterface();
-    
-    // Add classification status indicator
-    addClassificationStatus();
-    
-    // Always load years for all users
-    await loadYears();
-
-  } catch (error) {
-    window.location.href = '/login.html';
-  }
-};
- // Add this button in the admin section (only for superusers)
-if (currentUser.role === 'superuser') {
-  const adminSection = document.getElementById('adminSection');
-  if (adminSection) {
-    // Add batch classification section
-    const batchClassifyDiv = document.createElement('div');
-    batchClassifyDiv.className = 'admin-card';
-    batchClassifyDiv.innerHTML = `
-      <h3>🤖 Batch Difficulty Classification</h3>
-      <div class="admin-controls">
-        <p>Automatically classify difficulty for questions without difficulty set.</p>
-        <button onclick="batchClassifyQuestions()" class="admin-btn">
-          🚀 Start Batch Classification
-        </button>
-        <div id="batchProgress" style="display: none; margin-top: 10px;">
-          <div class="progress-bar">
-            <div id="progressFill" style="width: 0%; height: 20px; background: #4caf50;"></div>
-          </div>
-          <p id="progressText">Processing...</p>
-        </div>
-      </div>
-    `;
-    adminSection.appendChild(batchClassifyDiv);
-  }
-}
-
-// Batch classification function
-async function batchClassifyQuestions() {
-  if (!confirm('This will classify all questions without a difficulty level. Continue?')) {
-    return;
-  }
-  
-  const progressDiv = document.getElementById('batchProgress');
-  const progressFill = document.getElementById('progressFill');
-  const progressText = document.getElementById('progressText');
-  
-  progressDiv.style.display = 'block';
-  
-  try {
-    // Load all questions
-    const response = await fetch('/questions');
-    const questions = await response.json();
-    
-    // Filter questions without difficulty
-    const questionsToClassify = questions.filter(q => !q.difficulty || q.difficulty === '');
-    
-    if (questionsToClassify.length === 0) {
-      alert('All questions already have difficulty levels assigned!');
-      progressDiv.style.display = 'none';
-      return;
-    }
-    
-    let processed = 0;
-    let successful = 0;
-    
-    for (const question of questionsToClassify) {
-      progressText.textContent = `Processing ${processed + 1} of ${questionsToClassify.length}...`;
-      
-      const difficulty = await classifyDifficulty(question.question);
-      
-      if (difficulty) {
-        // Update the question
-        const updateResponse = await fetch(`/questions/${question._id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...question,
-            difficulty: difficulty
-          })
-        });
-        
-        if (updateResponse.ok) {
-          successful++;
-        }
-      }
-      
-      processed++;
-      progressFill.style.width = `${(processed / questionsToClassify.length) * 100}%`;
-      
-      // Add delay to avoid overwhelming the API
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-    
-    progressText.textContent = `Complete! Successfully classified ${successful} out of ${questionsToClassify.length} questions.`;
-    
-    // Reload questions after batch processing
-    setTimeout(() => {
-      progressDiv.style.display = 'none';
-      loadQuestions();
-    }, 3000);
-    
-  } catch (error) {
-    console.error('Batch classification error:', error);
-    progressText.textContent = 'Error during batch classification.';
-  }
-}
+ 
   </script>
 </body>
 </html>

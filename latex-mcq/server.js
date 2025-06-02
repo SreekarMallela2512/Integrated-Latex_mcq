@@ -149,8 +149,7 @@ app.post('/submit', requireAuth, async (req, res) => {
       pyqType, 
       shift, 
       year,
-      examDate,
-      autoClassified 
+      examDate
     } = req.body;
 
     // Validate PYQ fields if needed
@@ -182,8 +181,7 @@ app.post('/submit', requireAuth, async (req, res) => {
       topic,
       difficulty,
       pyqType: pyqType || 'Not PYQ',
-      createdBy: req.session.userId,
-      autoClassified: autoClassified || false
+      createdBy: req.session.userId
     };
 
     // Add PYQ specific fields if applicable
