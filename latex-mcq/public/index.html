@@ -5,7 +5,7 @@
   <title>LaTeX MCQ Input</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+ <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 <body>
   <div class="container">
@@ -626,51 +626,28 @@ function renderOptionLatex(num) {
   }
 
   // HTML escape
-  let escaped = input.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  let escaped = input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
   
-  // Check if input already has any form of delimiters
-  const hasDelimiters = /(\$\$[\s\S]*?\$\$|\$[^$]*\$|\\$$[\s\S]*?\\$$|\\$$[^)]*\\$$)/.test(escaped);
+  // Convert $$...$$ to $...$
+  escaped = escaped.replace(/\\$$(.+?)\\$$/g, '$$$1$$');
   
-  // If no delimiters but contains LaTeX patterns, wrap entire input
-  if (!hasDelimiters) {
-    // Check for common LaTeX commands and syntax
-    const latexIndicators = [
-      /\\[a-zA-Z]+/,           // LaTeX commands like \frac, \sqrt, \left
-      /\^{/,                   // Superscript with braces
-      /_{/,                    // Subscript with braces
-      /\\(left|right|big)/i,   // Delimiter commands
-      /\\(frac|sqrt|sum|int|prod|lim)/i,  // Math commands
-      /\\(alpha|beta|gamma|delta|theta|phi|pi|sigma|omega)/i, // Greek letters
-    ];
-    
-    if (latexIndicators.some(pattern => pattern.test(escaped))) {
-      escaped = `$${escaped}$`;
-    }
-  }
+  // Convert $$...$$ to $$...$$
+  escaped = escaped.replace(/\\$$(.+?)\\$$/g, '$$$$$$1$$$$');
   
-  // Convert LaTeX delimiters $$...$$ to $$...$$
-  escaped = escaped.replace(/\\$$([\s\S]*?)\\$$/g, (_, match) => `$$${match}$$`);
-  
-  // Convert LaTeX delimiters $$...$$ to $...$
-  escaped = escaped.replace(/\\$$(.*?)\\$$/g, (_, match) => `$${match}$`);
-  
-  // Ensure all math expressions use MathJax delimiters
-  // Handle display math $$...$$
-  escaped = escaped.replace(/\$\$([\s\S]*?)\$\$/g, (_, match) => `\$$${match}\$$`);
-  
-  // Handle inline math $...$, but avoid replacing escaped dollars \$
-  escaped = escaped.replace(/(?<!\\)\$([^$]*?)(?<!\\)\$/g, (_, match) => `\$$${match}\$$`);
-  
+  // Set the content
   preview.innerHTML = escaped;
 
-  MathJax.typesetClear([preview]);
-  MathJax.typesetPromise([preview]).catch(err => {
-    // Fallback: show original input in monospace if rendering fails
-    preview.innerHTML = `<code style="color:#666;">${input}</code>`;
-    console.error(`MathJax error for option ${num}:`, err);
-  });
-}
-    function showSuccess() {
+  // Render with MathJax
+  if (window.MathJax) {
+    MathJax.typesetClear([preview]);
+    MathJax.typesetPromise([preview]).catch(err => {
+      console.error(`MathJax error for option ${num}:`, err);
+    });
+  }
+}    function showSuccess() {
       const msg = document.getElementById("successMessage");
       msg.textContent = "✅ Question submitted successfully!";
       msg.style.color = "green";
