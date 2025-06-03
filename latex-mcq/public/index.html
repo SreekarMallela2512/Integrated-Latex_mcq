@@ -107,13 +107,16 @@
       </select>
 
       <label for="difficulty">Difficulty:</label>
-      <select name="difficulty" id="difficulty" required>
-        <option value="">-- Select Difficulty --</option>
-        <option value="easy">Easy</option>
-        <option value="medium">Medium</option>
-        <option value="hard">Hard</option>
-      </select>
-
+      <!-- Replace the existing difficulty dropdown with this -->
+<div class="difficulty-display">
+  <input type="text" name="difficulty" id="difficulty" readonly 
+         placeholder="Will be auto-classified..." 
+         style="background-color: #f0f0f0; cursor: not-allowed;">
+  <span id="classificationStatus" style="font-size: 0.8em; color: #666; margin-left: 10px;"></span>
+  <button type="button" onclick="reclassifyDifficulty()" style="margin-left: 10px; padding: 5px 10px;">
+    🔄 Re-classify
+  </button>
+</div>
       <!-- PYQ Section -->
       <div class="pyq-section">
         <h3>Previous Year Question (PYQ) Details</h3>
@@ -275,7 +278,6 @@
 
 <!-- Question List -->
 <div id="questionList"></div>
-    <div id="questionList"></div>
     <button type="button" onclick="cancelEdit()" id="cancelEditBtn" style="display: none;">Cancel Edit</button>
   </div>
 
@@ -283,6 +285,7 @@
     let currentUser = null;
     let editMode = false;
 let editingQuestionId = null;
+let wasAutoClassified = false;
 // Function to edit a question (superuser only)
 async function editQuestion(questionId) {
   if (currentUser.role !== 'superuser') {
@@ -414,6 +417,27 @@ async function deleteQuestion(questionId) {
     
     currentUser = data.user;
     updateUserInterface();
+     try {
+    const response = await fetch('/auth/status');
+    const data = await response.json();
+    
+    if (!data.authenticated) {
+      window.location.href = '/login.html';
+      return;
+    }
+    
+    currentUser = data.user;
+    updateUserInterface();
+    
+    // Add classification status indicator
+    addClassificationStatus();
+    
+    // Always load years for all users
+    await loadYears();
+
+  } catch (error) {
+    window.location.href = '/login.html';
+  }
     
     // Always load years for all users
     await loadYears();
@@ -515,31 +539,77 @@ async function populateExamDates() {
 
     let previewTimeout;
 
-    function renderLatex() {
-      clearTimeout(previewTimeout);
+   function renderLatex() {
+  clearTimeout(previewTimeout);
 
-      previewTimeout = setTimeout(() => {
-        const input = document.getElementById('question').value.trim();
-        const preview = document.getElementById('preview');
+  previewTimeout = setTimeout(async () => {
+    const input = document.getElementById('question').value.trim();
+    const preview = document.getElementById('preview');
 
-        if (!input) {
-          preview.innerHTML = '<em style="color: #777;">Preview will appear here...</em>';
-          return;
-        }
-
-        let escaped = input.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        escaped = escaped.replace(/\$\$(.+?)\$\$/gs, (_, match) => `\\[${match.trim()}\\]`);
-        escaped = escaped.replace(/(^|[^\\])\$(.+?)\$/g, (_, prefix, match) => `${prefix}\\(${match.trim()}\\)`);
-
-        preview.innerHTML = escaped;
-
-        MathJax.typesetClear([preview]);
-        MathJax.typesetPromise([preview]).catch(err => {
-          preview.innerHTML = '<span style="color:red;">LaTeX rendering error.</span>';
-          console.error('MathJax error:', err);
-        });
-      }, 300);
+    if (!input) {
+      preview.innerHTML = '<em style="color: #777;">Preview will appear here...</em>';
+      return;
     }
+
+    // LaTeX rendering
+    let escaped = input.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    escaped = escaped.replace(/\$\$(.+?)\$\$/gs, (_, match) => `\$$${match.trim()}\$$`);
+    escaped = escaped.replace(/(^|[^\\])\$(.+?)\$/g, (_, prefix, match) => `${prefix}\$$${match.trim()}\$$`);
+
+    preview.innerHTML = escaped;
+
+    MathJax.typesetClear([preview]);
+    MathJax.typesetPromise([preview]).catch(err => {
+      preview.innerHTML = '<span style="color:red;">LaTeX rendering error.</span>';
+      console.error('MathJax error:', err);
+    });
+
+    // Auto-classification logic
+    if (input.length > 30 && !editMode) {
+      const difficultyInput = document.getElementById('difficulty');
+      const difficultyStatus = document.getElementById('classificationStatus');
+      
+      // Don't reclassify if already has a value (unless it's being edited)
+      if (!difficultyInput.value || difficultyInput.value === '') {
+        if (difficultyStatus) {
+          difficultyStatus.textContent = '(Classifying...)';
+          difficultyStatus.style.color = '#1976d2';
+        }
+        
+        try {
+          const difficulty = await classifyDifficulty(input);
+          
+          if (difficulty) {
+            // Capitalize first letter
+            difficultyInput.value = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+            
+            if (difficultyStatus) {
+              difficultyStatus.textContent = '✓ Auto-classified';
+              difficultyStatus.style.color = '#4caf50';
+            }
+            
+            // Visual feedback
+            difficultyInput.style.backgroundColor = '#e8f5e9';
+            setTimeout(() => {
+              difficultyInput.style.backgroundColor = '#f0f0f0';
+            }, 2000);
+          } else {
+            if (difficultyStatus) {
+              difficultyStatus.textContent = '❌ Classification failed';
+              difficultyStatus.style.color = '#f44336';
+            }
+          }
+        } catch (error) {
+          console.error('Classification error:', error);
+          if (difficultyStatus) {
+            difficultyStatus.textContent = '❌ Classification error';
+            difficultyStatus.style.color = '#f44336';
+          }
+        }
+      }
+    }
+  }, 800); // Increased timeout to avoid too many API calls
+}
 
     function renderOptionLatex(num) {
       const input = document.getElementById(`option${num}`).value.trim();
@@ -641,7 +711,8 @@ form.addEventListener('submit', async function(event) {
     pyqType: formData.get('pyqType'),
     shift: formData.get('shift') || 'N/A',
     year: formData.get('year') ? parseInt(formData.get('year')) : null,
-    examDate: formData.get('examDate') || null
+    examDate: formData.get('examDate') || null,
+    autoClassified: wasAutoClassified // Add this
   };
 
   try {
@@ -677,6 +748,7 @@ form.addEventListener('submit', async function(event) {
   } catch (error) {
     alert('Error: ' + error.message);
   }
+  wasAutoClassified = false;
 });
     // Update the loadQuestions function in index.html to show creation date/time
 
@@ -709,26 +781,65 @@ async function loadQuestions() {
     // Show search and filter container
     document.getElementById('searchFilterContainer').style.display = 'flex';
     
+    // Check if the element exists before setting innerHTML
+    const questionList = document.getElementById('questionList');
+    if (!questionList) {
+      console.error('questionList element not found!');
+      return;
+    }
+    
     if (allQuestions.length === 0) {
-      document.getElementById('questionList').innerHTML = '<p>No questions found.</p>';
+      questionList.innerHTML = '<p>No questions found.</p>';
       document.getElementById('resultsSummary').style.display = 'none';
       return;
     }
 
-    // Initialize filters on first load
-    initializeFilters();
+    // Display questions directly for now (without filters)
+    questionList.innerHTML = '';
     
-    // Display all questions initially
-    filteredQuestions = [...allQuestions];
-    displayFilteredQuestions();
-    updateResultsSummary();
+    allQuestions.forEach((q, i) => {
+      const div = document.createElement('div');
+      div.className = 'question-card';
+      
+      let pyqInfo = '';
+      if (q.pyqType && q.pyqType !== 'Not PYQ') {
+        pyqInfo = `<div class="pyq-info">
+          <strong>PYQ:</strong> ${q.pyqType}
+          ${q.examDate ? ` - ${new Date(q.examDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}` : ''}
+          ${q.shift && q.shift !== 'N/A' ? ` - ${q.shift}` : ''}
+        </div>`;
+      }
+      
+      div.innerHTML = `
+        <div class="question-header">
+          <strong>Question No: ${q.questionNo}</strong>
+        </div>
+        <strong>Q${i + 1}:</strong> ${q.question}<br/>
+        <ul>
+          ${q.options.map((opt, idx) => 
+            `<li${idx === q.correctOption ? ' style="font-weight:bold;color:green;"' : ''}>${String.fromCharCode(65 + idx)}. ${opt}</li>`
+          ).join('')}
+        </ul>
+        <div class="question-meta">
+          <em>Subject:</em> ${q.subject}, <em>Topic:</em> ${q.topic}, <em>Difficulty:</em> ${q.difficulty}
+        </div>
+        ${pyqInfo}
+        <hr/>
+      `;
+      
+      questionList.appendChild(div);
+    });
+
+    // Re-render MathJax
+    if (typeof MathJax !== 'undefined') {
+      MathJax.typesetPromise([questionList]).catch(err => console.error('MathJax error:', err));
+    }
     
   } catch (error) {
     console.error('Error loading questions:', error);
     alert('Error loading questions. Please try again.');
   }
 }
-
 // Initialize filters
 function initializeFilters() {
   // Show creator filter for superusers
@@ -812,7 +923,6 @@ function toggleFilters() {
     toggleIcon.textContent = '▼';
   }
 }
-
 // Search functionality
 function searchQuestions() {
   const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
@@ -918,7 +1028,9 @@ function applyFilters() {
 function displayFilteredQuestions() {
   const list = document.getElementById('questionList');
   list.innerHTML = '';
-
+const classificationBadge = q.autoClassified ? 
+  '<span class="badge auto-classified">🤖 Auto-classified</span>' : 
+  '';
   if (filteredQuestions.length === 0) {
     list.innerHTML = '<p>No questions match your search/filters.</p>';
     return;
@@ -983,8 +1095,10 @@ if (q.pyqType && q.pyqType !== 'Not PYQ') {
       <strong>Q${i + 1}:</strong> ${questionHtml}<br/>
       <ul>${optionsHtml}</ul>
       <div class="question-meta">
-        <em>Subject:</em> ${q.subject}, <em>Topic:</em> ${q.topic}, <em>Difficulty:</em> ${q.difficulty}
-      </div>
+  <em>Subject:</em> ${q.subject}, 
+  <em>Topic:</em> ${q.topic}, 
+  <em>Difficulty:</em> ${q.difficulty} ${classificationBadge}
+</div>
       ${pyqInfo}
       ${creatorInfo}
       ${actionButtons}
@@ -1377,7 +1491,176 @@ function updateUserInterface() {
     document.getElementById('adminToggleBtn').style.display = 'block';
   }
 }
+const CLASSIFIER_API_URL = 'http://localhost:8000';
 
+// Function to classify difficulty using the external API
+async function classifyDifficulty(question) {
+  try {
+    const response = await fetch(`${CLASSIFIER_API_URL}/classify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        session_id: `mcq-${currentUser.username}-${Date.now()}`,
+        question: question
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Classification failed');
+    }
+
+    const data = await response.json();
+    wasAutoClassified = true; // Set flag
+    return data.difficulty.toLowerCase();
+  } catch (error) {
+    console.error('Error classifying difficulty:', error);
+     wasAutoClassified = false;
+    return null;
+  }
+}
+
+// Add auto-classification status indicator
+function addClassificationStatus() {
+  const difficultyLabel = document.querySelector('label[for="difficulty"]');
+  if (!document.getElementById('classificationStatus')) {
+    difficultyLabel.innerHTML = `
+      Difficulty: 
+      <span id="classificationStatus" style="font-size: 0.8em; color: #666;"></span>
+      <button type="button" onclick="reclassifyDifficulty()" style="margin-left: 10px; padding: 2px 8px; font-size: 0.8em;">
+        🔄 Re-classify
+      </button>
+    `;
+  }
+}
+
+// Manual re-classification function
+async function reclassifyDifficulty() {
+  const question = document.getElementById('question').value;
+  if (!question || question.trim().length < 20) {
+    alert('Please enter a complete question first (at least 20 characters)');
+    return;
+  }
+
+  const difficultyStatus = document.getElementById('classificationStatus');
+  const difficultySelect = document.getElementById('difficulty');
+  
+  difficultyStatus.textContent = '(Classifying...)';
+  difficultyStatus.style.color = '#1976d2';
+  
+  const difficulty = await classifyDifficulty(question);
+  if (difficulty) {
+    difficultySelect.value = difficulty;
+    difficultyStatus.textContent = '(Auto-classified ✓)';
+    difficultyStatus.style.color = '#4caf50';
+    
+    // Visual feedback
+    difficultySelect.style.backgroundColor = '#e8f5e9';
+    setTimeout(() => {
+      difficultySelect.style.backgroundColor = '';
+    }, 2000);
+  } else {
+    difficultyStatus.textContent = '(Classification failed - select manually)';
+    difficultyStatus.style.color = '#f44336';
+  }
+}
+// Add this button in the admin section (only for superusers)
+if (currentUser.role === 'superuser') {
+  const adminSection = document.getElementById('adminSection');
+  if (adminSection) {
+    // Add batch classification section
+    const batchClassifyDiv = document.createElement('div');
+    batchClassifyDiv.className = 'admin-card';
+    batchClassifyDiv.innerHTML = `
+      <h3>🤖 Batch Difficulty Classification</h3>
+      <div class="admin-controls">
+        <p>Automatically classify difficulty for questions without difficulty set.</p>
+        <button onclick="batchClassifyQuestions()" class="admin-btn">
+          🚀 Start Batch Classification
+        </button>
+        <div id="batchProgress" style="display: none; margin-top: 10px;">
+          <div class="progress-bar">
+            <div id="progressFill" style="width: 0%; height: 20px; background: #4caf50;"></div>
+          </div>
+          <p id="progressText">Processing...</p>
+        </div>
+      </div>
+    `;
+    adminSection.appendChild(batchClassifyDiv);
+  }
+}
+
+// Batch classification function
+async function batchClassifyQuestions() {
+  if (!confirm('This will classify all questions without a difficulty level. Continue?')) {
+    return;
+  }
+  
+  const progressDiv = document.getElementById('batchProgress');
+  const progressFill = document.getElementById('progressFill');
+  const progressText = document.getElementById('progressText');
+  
+  progressDiv.style.display = 'block';
+  
+  try {
+    // Load all questions
+    const response = await fetch('/questions');
+    const questions = await response.json();
+    
+    // Filter questions without difficulty
+    const questionsToClassify = questions.filter(q => !q.difficulty || q.difficulty === '');
+    
+    if (questionsToClassify.length === 0) {
+      alert('All questions already have difficulty levels assigned!');
+      progressDiv.style.display = 'none';
+      return;
+    }
+    
+    let processed = 0;
+    let successful = 0;
+    
+    for (const question of questionsToClassify) {
+      progressText.textContent = `Processing ${processed + 1} of ${questionsToClassify.length}...`;
+      
+      const difficulty = await classifyDifficulty(question.question);
+      
+      if (difficulty) {
+        // Update the question
+        const updateResponse = await fetch(`/questions/${question._id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...question,
+            difficulty: difficulty
+          })
+        });
+        
+        if (updateResponse.ok) {
+          successful++;
+        }
+      }
+      
+      processed++;
+      progressFill.style.width = `${(processed / questionsToClassify.length) * 100}%`;
+      
+      // Add delay to avoid overwhelming the API
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    progressText.textContent = `Complete! Successfully classified ${successful} out of ${questionsToClassify.length} questions.`;
+    
+    // Reload questions after batch processing
+    setTimeout(() => {
+      progressDiv.style.display = 'none';
+      loadQuestions();
+    }, 3000);
+    
+  } catch (error) {
+    console.error('Batch classification error:', error);
+    progressText.textContent = 'Error during batch classification.';
+  }
+}
  
   </script>
 </body>

@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mcq-mongodb
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+    volumes:
+      - mongodb_data:/data/db
+    ports:
+      - "27017:27017"
+
+  classifier-api:
+    build: ./Automated-Question-classify
+    container_name: question-classifier
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    restart: unless-stopped
+
+  latex-mcq:
+    build: ./latex-mcq
+    container_name: latex-mcq-app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mongodb
+      - classifier-api
+    environment:
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017/mcq-database?authSource=admin
+      - SESSION_SECRET=${SESSION_SECRET}
+      - CLASSIFIER_API_URL=http://classifier-api:8000
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:

@@ -36,6 +36,11 @@ const mcqSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  // In mcqModel.js, add this field to the schema
+autoClassified: {
+  type: Boolean,
+  default: false
+},
   createdAt: { type: Date, default: Date.now }
 });
 
