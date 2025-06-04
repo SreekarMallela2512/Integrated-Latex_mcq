@@ -1,4 +1,9 @@
 require('dotenv').config();
+// At the top of server.js, after require statements
+console.log('=== Environment Variables ===');
+console.log('CLASSIFIER_URL:', process.env.CLASSIFIER_URL);
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('===========================');
 const express = require('express');
 const mongoose = require('mongoose');
 const session = require('express-session');
@@ -820,6 +825,56 @@ app.delete('/admin/exam-dates', requireSuperUser, async (req, res) => {
     console.error('Error deleting exam date:', err);
     res.status(500).json({ error: 'Error deleting exam date' });
   }
+});
+app.get('/test-classifier-manual', async (req, res) => {
+  const results = {};
+  
+  // Check environment variable
+  results.env_check = {
+    CLASSIFIER_URL: process.env.CLASSIFIER_URL,
+    exists: !!process.env.CLASSIFIER_URL
+  };
+  
+  // Test health endpoint
+  try {
+    const healthResponse = await axios.get('https://mcq-classifier-g1z9.onrender.com/health');
+    results.health_check = {
+      success: true,
+      data: healthResponse.data
+    };
+  } catch (err) {
+    results.health_check = {
+      success: false,
+      error: err.message
+    };
+  }
+  
+  // Test classify endpoint
+  try {
+    const classifyResponse = await axios.post(
+      'https://mcq-classifier-g1z9.onrender.com/classify',
+      {
+        session_id: 'test-' + Date.now(),
+        question: 'What is the derivative of x^2?'
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 15000
+      }
+    );
+    results.classify_check = {
+      success: true,
+      data: classifyResponse.data
+    };
+  } catch (err) {
+    results.classify_check = {
+      success: false,
+      error: err.message,
+      response: err.response?.data
+    };
+  }
+  
+  res.json(results);
 });
 
 // Public route: Get all available years (no auth required)
