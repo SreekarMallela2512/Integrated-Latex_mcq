@@ -3,12 +3,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict
 import re
+import os
+import uvicorn
 
 app = FastAPI()
 
+# Get allowed origins from environment variable, fallback to * for development
+allowed_origins = os.environ.get('ALLOWED_ORIGINS', '*').split(',')
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -67,6 +72,15 @@ def classify_by_steps(step_score: int) -> str:
     else:
         return "Easy"
 
+# Health check endpoint for Render
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "mcq-classifier"}
+
+@app.get("/")
+async def root():
+    return {"message": "MCQ Classifier Service", "version": "1.0.0"}
+
 @app.post("/classify", response_model=DifficultyResponse)
 async def classify_question(request: DifficultyRequest):
     if request.session_id not in chat_histories:
@@ -112,3 +126,15 @@ async def get_session_stats(session_id: str):
         "hard": {"count": hard_count, "percentage": round(hard_count/total*100, 1)},
         "distribution": "Ideal JEE Main: Easy(30%), Medium(50%), Hard(20%)"
     }
+
+if __name__ == "__main__":
+    # Get port from environment variable (Render sets this)
+    port = int(os.environ.get("PORT", 5000))
+    
+    # Run the FastAPI app with uvicorn
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        log_level="info"
+    )

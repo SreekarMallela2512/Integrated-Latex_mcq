@@ -4,12 +4,13 @@ const mongoose = require('mongoose');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const axios   = require('axios');
+const path = require('path');
 const MCQ = require('./mcqModel');
 const User = require('./userModel');
 const Year = require('./yearModel');
 const ExamDate = require('./examDateModel');  
 const app = express();
-const CLASSIFIER_URL = process.env.CLASSIFIER_URL; 
+
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
@@ -881,6 +882,7 @@ app.get('/public/exam-dates/:year', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+const CLASSIFIER_URL = process.env.CLASSIFIER_URL;
 app.listen(PORT, () => {
   console.log(`Server started on http://localhost:${PORT}`);
   console.log('Features added:');

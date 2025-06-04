@@ -1,32 +1,32 @@
 services:
+  # Python Classifier Service
   - type: web
     name: mcq-classifier
-    env: docker
-    plan: free
-    branch: main
-    repo: github.com/your-org/your-repo
-    dockerfilePath: Automated-Question-classify/Dockerfile
-    publishPort: 8000
+    runtime: docker
+    repo: https://github.com/yourusername/MCQ-Integration.git # Replace with your repo
+    rootDir: Automated-Question-classify
+    dockerfilePath: ./Dockerfile
+    plan: free # or "starter" for paid plan
     envVars:
-      - key: MONGODB_URI
-        fromDatabase:
-          name: mcq-mongo   # if you run Mongo as a Private Service
-      - key: SESSION_SECRET
-        sync: false       # not needed by classifier but safe to set
+      - key: PORT
+        value: 5000
+      - key: PYTHON_ENV
+        value: production
+    healthCheckPath: /health # Add a health check endpoint in your app
 
+  # Node.js Web Service
   - type: web
-    name: mcq-web
-    env: docker
-    plan: free
-    branch: main
-    repo: github.com/your-org/your-repo
-    dockerfilePath: latex-mcq/Dockerfile
-    publishPort: 3000
+    name: mcq-latex-web
+    runtime: docker
+    repo: https://github.com/yourusername/MCQ-Integration.git # Replace with your repo
+    rootDir: latex-mcq
+    dockerfilePath: ./Dockerfile
+    plan: free # or "starter" for paid plan
     envVars:
-      - key: MONGODB_URI
-        fromDatabase:
-          name: mcq-mongo
-      - key: SESSION_SECRET
-        fromEnv: SESSION_SECRET  # same secret you set above
+      - key: PORT
+        value: 3000
+      - key: NODE_ENV
+        value: production
       - key: CLASSIFIER_URL
-        value: https://mcq-classifier.onrender.com
+        value: https://mcq-classifier.onrender.com # Will be the URL of your classifier service
+    healthCheckPath: /health # Add a health check endpoint in your app
