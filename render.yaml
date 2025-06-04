@@ -18,7 +18,7 @@ services:
   - type: web
     name: mcq-latex-web
     runtime: docker
-    repo: https://github.com/yourusername/MCQ-Integration.git # Replace with your repo
+    repo: https://github.com/SreekarMallela2512/Integrated-Latex_mcq.git # Replace with your repo
     rootDir: latex-mcq
     dockerfilePath: ./Dockerfile
     plan: free # or "starter" for paid plan
