@@ -3,13 +3,13 @@ const express = require('express');
 const mongoose = require('mongoose');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
-
+const axios   = require('axios');
 const MCQ = require('./mcqModel');
 const User = require('./userModel');
 const Year = require('./yearModel');
 const ExamDate = require('./examDateModel');  
 const app = express();
-
+const CLASSIFIER_URL = process.env.CLASSIFIER_URL; 
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
@@ -139,75 +139,78 @@ app.get('/auth/status', (req, res) => {
 app.post('/submit', requireAuth, async (req, res) => {
   try {
     const { 
-      questionNo, 
-      question, 
-      options, 
-      correctOption, 
-      subject, 
-      topic, 
-      difficulty, 
-      pyqType, 
-      shift, 
-      year,
-      examDate,
+      questionNo, question, options, correctOption,
+      subject, topic, difficulty: userDifficulty,
+      pyqType, shift, year, examDate,
       autoClassified
     } = req.body;
 
     // Validate PYQ fields if needed
     if (pyqType === 'JEE MAIN PYQ') {
       if (!shift || !year) {
-        return res.status(400).json({ 
-          error: 'Shift and Year are required for JEE MAIN PYQ questions' 
-        });
+        return res.status(400).json({ error: 'Shift and Year are required for JEE MAIN PYQ questions' });
       }
-      const yearNum = parseInt(year);
-  if (yearNum < 1000) {
-    return res.status(400).json({ 
-      error: 'Invalid year. Year must be a 4-digit number (minimum 1000).' 
-    });
-  }
-}
-    
-      
+      const yearNum = parseInt(year, 10);
+      if (yearNum < 1000) {
+        return res.status(400).json({ error: 'Invalid year. Year must be a 4-digit number (minimum 1000).' });
+      }
+    }
 
     const correctOptionIndex = parseInt(correctOption, 10) - 1;
 
-    // Create MCQ object with conditional fields
+    // Build initial mcqData
     const mcqData = {
-      questionNo: questionNo,
+      questionNo,
       question,
       options,
       correctOption: correctOptionIndex,
       subject,
       topic,
-      difficulty,
+      difficulty: userDifficulty,         // will override if autoClassified
       pyqType: pyqType || 'Not PYQ',
       createdBy: req.session.userId,
-      autoClassified: autoClassified || false
+      autoClassified: Boolean(autoClassified)
     };
 
-    // Add PYQ specific fields if applicable
+    // Add PYQ-specific fields
     if (pyqType === 'JEE MAIN PYQ') {
       mcqData.shift = shift;
-      mcqData.year = parseInt(year);
-      if (examDate) {
-        mcqData.examDate = new Date(examDate);
-      }
+      mcqData.year  = parseInt(year, 10);
+      if (examDate) mcqData.examDate = new Date(examDate);
     }
 
+    // --- NEW: auto-classification step ---
+    if (mcqData.autoClassified && CLASSIFIER_URL) {
+      try {
+        const resp = await axios.post(
+          `${CLASSIFIER_URL}/classify`,
+          { session_id: req.sessionID, question },
+          { timeout: 5000 }
+        );
+        mcqData.difficulty = resp.data.difficulty;
+        console.log("✅ Auto-classified difficulty:", mcqData.difficulty);
+      } catch (err) {
+        console.error("⚠️ Auto-classify failed:", err.message);
+        // fallback to userDifficulty or leave as-is
+      }
+    }
+    // --- end auto-classification ---
+
+    // Persist to MongoDB
     const mcq = new MCQ(mcqData);
     await mcq.save();
-    
+
     res.json({ 
       message: "Question added successfully!",
-      questionId: mcq._id 
+      questionId: mcq._id,
+      difficulty: mcqData.difficulty
     });
+
   } catch (err) {
-    console.error('Error saving question:', err);
+    console.error('❌ Error saving question:', err);
     res.status(500).json({ error: "Error saving question. Please try again." });
   }
 });
-
 // Get questions based on user role with enhanced filtering and sorting
 app.get('/questions', requireAuth, async (req, res) => {
   try {
