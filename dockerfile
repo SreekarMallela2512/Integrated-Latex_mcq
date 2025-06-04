@@ -1,35 +1,24 @@
 # Base image
-FROM node:16-slim
+FROM python:3.9-slim
 
-# Install Python, pip and required tools
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-dev \
-    build-essential \
-    supervisor \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-# Upgrade pip
-RUN python3 -m pip install --upgrade pip setuptools wheel
+# Install Node.js
+RUN apt-get update && \
+    apt-get install -y curl && \
+    curl -fsSL https://deb.nodesource.com/setup_16.x | bash - && \
+    apt-get install -y nodejs supervisor build-essential && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Copy both projects
-COPY ./Automated-Question-classify ./Automated-Question-classify
+COPY ./Automated-Question-Classify ./Automated-Question-classify
 COPY ./latex-mcq ./latex-mcq
 
-# Install Python dependencies for classifier
+# Install Python dependencies
 WORKDIR /app/Automated-Question-classify
-# Install packages one by one to better handle dependencies
-RUN python3 -m pip install --no-cache-dir fastapi==0.104.1 && \
-    python3 -m pip install --no-cache-dir pydantic==2.4.2 && \
-    python3 -m pip install --no-cache-dir uvicorn==0.24.0 && \
-    python3 -m pip install --no-cache-dir langchain==0.0.335 && \
-    python3 -m pip install --no-cache-dir langchain-openai==0.0.2
+RUN pip install -r requirements.txt
 
-# Install Node dependencies for latex-mcq
+# Install Node dependencies
 WORKDIR /app/latex-mcq
 RUN npm install
 
@@ -38,7 +27,7 @@ RUN echo '[supervisord]\n\
 nodaemon=true\n\
 \n\
 [program:classifier-api]\n\
-command=uvicorn main:app --host 0.0.0.0 --port 8000\n\
+command=python -m uvicorn main:app --host 0.0.0.0 --port 8000\n\
 directory=/app/Automated-Question-classify\n\
 autostart=true\n\
 autorestart=true\n\
