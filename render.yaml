@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: mcq-classifier
+    env: docker
+    plan: free
+    branch: main
+    repo: github.com/your-org/your-repo
+    dockerfilePath: Automated-Question-classify/Dockerfile
+    publishPort: 8000
+    envVars:
+      - key: MONGODB_URI
+        fromDatabase:
+          name: mcq-mongo   # if you run Mongo as a Private Service
+      - key: SESSION_SECRET
+        sync: false       # not needed by classifier but safe to set
+
+  - type: web
+    name: mcq-web
+    env: docker
+    plan: free
+    branch: main
+    repo: github.com/your-org/your-repo
+    dockerfilePath: latex-mcq/Dockerfile
+    publishPort: 3000
+    envVars:
+      - key: MONGODB_URI
+        fromDatabase:
+          name: mcq-mongo
+      - key: SESSION_SECRET
+        fromEnv: SESSION_SECRET  # same secret you set above
+      - key: CLASSIFIER_URL
+        value: https://mcq-classifier.onrender.com

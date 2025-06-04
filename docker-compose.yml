@@ -1,28 +1,17 @@
+version: "3.8"
 services:
-  mongodb:
-    image: mongo:latest
-    container_name: mcq-mongodb
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=password
-    volumes:
-      - mongodb_data:/data/db
+  classifier:
+    build:
+      context: ./Automated-Question-classify
+      dockerfile: Dockerfile
+    image: mcq-classifier
     ports:
-      - "27017:27017"
+      - "8000:8000"
 
-  app:
-    build: .
-    container_name: mcq-app
+  web:
+    build:
+      context: ./latex-mcq
+      dockerfile: Dockerfile
+    image: mcq-web
     ports:
       - "3000:3000"
-      - "8000:8000"
-    depends_on:
-      - mongodb
-    environment:
-      - MONGODB_URI=mongodb://admin:password@mongodb:27017/mcq-database?authSource=admin
-      - SESSION_SECRET=${SESSION_SECRET}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-    restart: unless-stopped
-
-volumes:
-  mongodb_data:
