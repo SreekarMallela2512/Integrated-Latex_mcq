@@ -197,20 +197,13 @@ app.post('/submit', requireAuth, async (req, res) => {
       autoClassified
     } = req.body;
 
-    // Validate PYQ fields if needed
-    if (pyqType === 'JEE MAIN PYQ') {
-      if (!shift || !year) {
-        return res.status(400).json({ error: 'Shift and Year are required for JEE MAIN PYQ questions' });
-      }
-      const yearNum = parseInt(year, 10);
-      if (yearNum < 1000) {
-        return res.status(400).json({ error: 'Invalid year. Year must be a 4-digit number (minimum 1000).' });
-      }
-    }
+    console.log("=== Submit Request ===");
+    console.log("Auto-classified:", autoClassified);
+    console.log("User difficulty:", userDifficulty);
+    console.log("Question preview:", question?.substring(0, 100));
 
-    const correctOptionIndex = parseInt(correctOption, 10) - 1;
+    // ... validation code ...
 
-    // Build initial mcqData
     const mcqData = {
       questionNo,
       question,
@@ -218,48 +211,66 @@ app.post('/submit', requireAuth, async (req, res) => {
       correctOption: correctOptionIndex,
       subject,
       topic,
-            difficulty: userDifficulty,         // will override if autoClassified
+      difficulty: userDifficulty,
       pyqType: pyqType || 'Not PYQ',
       createdBy: req.session.userId,
       autoClassified: Boolean(autoClassified)
     };
 
-    // Add PYQ-specific fields
-    if (pyqType === 'JEE MAIN PYQ') {
-      mcqData.shift = shift;
-      mcqData.year  = parseInt(year, 10);
-      if (examDate) mcqData.examDate = new Date(examDate);
-    }
+    // ... PYQ fields code ...
 
-    // --- NEW: auto-classification step ---
+    // Auto-classification step
     if (mcqData.autoClassified && CLASSIFIER_URL) {
       try {
+        console.log("🔄 Starting classification...");
+        console.log("URL:", `${CLASSIFIER_URL}/classify`);
+        console.log("Session ID:", req.sessionID);
+        
+        const classifyPayload = {
+          session_id: req.sessionID,
+          question: question
+        };
+        
         const resp = await axios.post(
           `${CLASSIFIER_URL}/classify`,
-          { session_id: req.sessionID, question },
-          { timeout: 5000 }
+          classifyPayload,
+          { 
+            timeout: 30000,
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          }
         );
+        
+        console.log("✅ Classification response:", resp.data);
         mcqData.difficulty = resp.data.difficulty;
-        console.log("✅ Auto-classified difficulty:", mcqData.difficulty);
+        
       } catch (err) {
-        console.error("⚠️ Auto-classify failed:", err.message);
-        // fallback to userDifficulty or leave as-is
+        console.error("❌ Classification error details:");
+        console.error("Message:", err.message);
+        console.error("Code:", err.code);
+        if (err.response) {
+          console.error("Response status:", err.response.status);
+          console.error("Response data:", err.response.data);
+        }
+        // Fallback to user difficulty
+        mcqData.difficulty = userDifficulty || 'Medium';
       }
     }
-    // --- end auto-classification ---
 
-    // Persist to MongoDB
+    // Save to database
     const mcq = new MCQ(mcqData);
     await mcq.save();
 
     res.json({ 
       message: "Question added successfully!",
       questionId: mcq._id,
-      difficulty: mcqData.difficulty
+      difficulty: mcqData.difficulty,
+      wasAutoClassified: mcqData.autoClassified
     });
 
   } catch (err) {
-    console.error('❌ Error saving question:', err);
+    console.error('❌ Submit error:', err);
     res.status(500).json({ error: "Error saving question. Please try again." });
   }
 });
@@ -945,7 +956,18 @@ app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
   res.status(500).json({ error: 'Internal server error' });
 });
-
+app.post('/api/classify', requireAuth, async (req, res) => {
+  try {
+    const response = await axios.post(
+      `${CLASSIFIER_URL}/classify`,
+      req.body,
+      { timeout: 15000 }
+    );
+    res.json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: 'Classification failed' });
+  }
+});
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server started on port ${PORT}`);
