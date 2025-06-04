@@ -5,8 +5,14 @@ FROM node:16-slim
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
+    python3-dev \
+    build-essential \
     supervisor \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip
+RUN python3 -m pip install --upgrade pip
 
 WORKDIR /app
 
@@ -16,36 +22,17 @@ COPY ./latex-mcq ./latex-mcq
 
 # Install Python dependencies for classifier
 WORKDIR /app/Automated-Question-classify
-RUN pip3 install --no-cache-dir -r requirements.txt
+# Install specific versions of packages
+RUN pip3 install --no-cache-dir \
+    fastapi==0.104.1 \
+    langchain==0.0.335 \
+    langchain-openai==0.0.2 \
+    pydantic==2.4.2 \
+    uvicorn==0.24.0
 
 # Install Node dependencies for latex-mcq
 WORKDIR /app/latex-mcq
 RUN npm install
-
-# Create start script equivalent to your bat file
-RUN echo '#!/bin/bash\n\
-echo "Starting MCQ Application Services..."\n\
-\n\
-# Start Classifier API\n\
-cd /app/Automated-Question-classify\n\
-uvicorn main:app --host 0.0.0.0 --port 8000 & \n\
-\n\
-# Wait 5 seconds\n\
-sleep 5\n\
-\n\
-# Start LaTeX MCQ App\n\
-cd /app/latex-mcq\n\
-node server.js & \n\
-\n\
-echo "Services started!"\n\
-echo "- Classifier API: http://localhost:8000"\n\
-echo "- MCQ Application: http://localhost:3000"\n\
-\n\
-# Keep container running\n\
-wait' > /app/start-services.sh
-
-# Make the script executable
-RUN chmod +x /app/start-services.sh
 
 # Create supervisord configuration
 RUN echo '[supervisord]\n\
