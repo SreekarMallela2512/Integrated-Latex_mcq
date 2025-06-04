@@ -3,7 +3,7 @@ services:
   - type: web
     name: mcq-classifier
     runtime: docker
-    repo: https://github.com/yourusername/MCQ-Integration.git # Replace with your repo
+    repo: https://github.com/SreekarMallela2512/Integrated-Latex_mcq.git # Replace with your repo
     rootDir: Automated-Question-classify
     dockerfilePath: ./Dockerfile
     plan: free # or "starter" for paid plan
