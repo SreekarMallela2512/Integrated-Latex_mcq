@@ -35,6 +35,7 @@ const connectWithRetry = () => {
 connectWithRetry();
 
 // Session configuration
+// Session configuration - UPDATE THIS PART
 app.use(session({
   secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
   resave: false,
@@ -44,11 +45,18 @@ app.use(session({
     touchAfter: 24 * 3600 // lazy session update
   }),
   cookie: {
-    secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+    secure: process.env.NODE_ENV === 'production', // This should be true in production
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: 'strict' // Add this for CSRF protection
+  },
+  // Add these for proxy support (Render uses proxy)
+  proxy: true, // Trust the reverse proxy
+  name: 'sessionId' // Custom session name
 }));
+
+// Add this BEFORE session middleware to trust proxy
+app.set('trust proxy', 1); // Trust first proxy
 
 // Middleware
 app.use(express.json());
