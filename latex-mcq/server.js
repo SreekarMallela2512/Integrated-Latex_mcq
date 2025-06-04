@@ -3,22 +3,36 @@ const express = require('express');
 const mongoose = require('mongoose');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
-const axios   = require('axios');
+const axios = require('axios');
 const path = require('path');
+
+// Import models
 const MCQ = require('./mcqModel');
 const User = require('./userModel');
 const Year = require('./yearModel');
-const ExamDate = require('./examDateModel');  
+const ExamDate = require('./examDateModel');
+
 const app = express();
 
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-}).then(() => {
-  console.log('✅ Connected to MongoDB Atlas');
-}).catch(err => {
-  console.error('❌ Connection error:', err.message);
-});
+// Get port from environment variable (Render sets this)
+const PORT = process.env.PORT || 3000;
+const CLASSIFIER_URL = process.env.CLASSIFIER_URL;
+
+// MongoDB connection with retry logic
+const connectWithRetry = () => {
+  mongoose.connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+  }).then(() => {
+    console.log('✅ Connected to MongoDB Atlas');
+  }).catch(err => {
+    console.error('❌ MongoDB connection error:', err.message);
+    console.log('Retrying in 5 seconds...');
+    setTimeout(connectWithRetry, 5000);
+  });
+};
+
+connectWithRetry();
 
 // Session configuration
 app.use(session({
@@ -26,18 +40,42 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   store: MongoStore.create({
-    mongoUrl: process.env.MONGODB_URI
+    mongoUrl: process.env.MONGODB_URI,
+    touchAfter: 24 * 3600 // lazy session update
   }),
   cookie: {
-    secure: false, // Set to true in production with HTTPS
+    secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
 }));
 
+// Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
+
+// Health check endpoint for Render
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy', 
+    service: 'mcq-latex-web',
+    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
+});
+
+// Root endpoint
+app.get('/api', (req, res) => {
+  res.json({ 
+    message: 'MCQ LaTeX Web Service', 
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      auth: '/auth/status',
+      questions: '/questions'
+    }
+  });
+});
 
 // Middleware to check authentication
 const requireAuth = (req, res, next) => {
@@ -167,7 +205,7 @@ app.post('/submit', requireAuth, async (req, res) => {
       correctOption: correctOptionIndex,
       subject,
       topic,
-      difficulty: userDifficulty,         // will override if autoClassified
+            difficulty: userDifficulty,         // will override if autoClassified
       pyqType: pyqType || 'Not PYQ',
       createdBy: req.session.userId,
       autoClassified: Boolean(autoClassified)
@@ -212,6 +250,7 @@ app.post('/submit', requireAuth, async (req, res) => {
     res.status(500).json({ error: "Error saving question. Please try again." });
   }
 });
+
 // Get questions based on user role with enhanced filtering and sorting
 app.get('/questions', requireAuth, async (req, res) => {
   try {
@@ -510,7 +549,7 @@ function getHardcodedExamDates(year) {
     ],
     2022: [
       { date: '2022-06-23', label: 'June 23, 2022' },
-      { date: '2022-06-24', label: 'June 24, 2022' },
+           { date: '2022-06-24', label: 'June 24, 2022' },
       { date: '2022-06-25', label: 'June 25, 2022' },
       { date: '2022-06-26', label: 'June 26, 2022' },
       { date: '2022-06-27', label: 'June 27, 2022' },
@@ -542,7 +581,6 @@ function getHardcodedExamDates(year) {
   return examDates[year] || [];
 }
 
-// Year Management Routes (Superuser only)
 // Year Management Routes (Superuser only)
 app.get('/admin/years', requireSuperUser, async (req, res) => {
   try {
@@ -587,7 +625,7 @@ app.post('/admin/years', requireSuperUser, async (req, res) => {
   try {
     const { year } = req.body;
     
-     if (!year || isNaN(year) || year < 1000) {
+    if (!year || isNaN(year) || year < 1000) {
       return res.status(400).json({ error: 'Invalid year. Must be a valid number.' });
     }
     
@@ -639,50 +677,7 @@ app.delete('/admin/years/:year', requireSuperUser, async (req, res) => {
 });
 
 // Exam Date Management Routes (Superuser only)
-// Exam Date Management Routes (Superuser only)
 app.get('/admin/exam-dates/:year', requireSuperUser, async (req, res) => {
-  try {
-    const { year } = req.params;
-    const yearNum = parseInt(year);
-    
-    // Get exam dates from ExamDate collection
-    const storedDates = await ExamDate.find({ year: yearNum }).sort({ date: 1 });
-    
-    // Get hardcoded exam dates for the year
-    const hardcodedDates = getHardcodedExamDates(yearNum);
-    
-    // Create a map to merge dates
-    const dateMap = new Map();
-    
-    // Add hardcoded dates
-    hardcodedDates.forEach(d => {
-      dateMap.set(d.date, {
-        date: d.date,
-        label: d.label
-      });
-    });
-    
-    // Add stored dates (will override hardcoded if same date)
-    storedDates.forEach(d => {
-      dateMap.set(d.date.toISOString().split('T')[0], {
-        date: d.date.toISOString().split('T')[0],
-        label: d.label
-      });
-    });
-    
-    // Convert map to array and sort
-    const allDates = Array.from(dateMap.values())
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    res.json(allDates);
-  } catch (err) {
-    console.error('Error fetching exam dates:', err);
-    res.status(500).json({ error: 'Error fetching exam dates' });
-  }
-});
-
-// Also update the public route used by the main form
-app.get('/admin/exam-dates/:year', async (req, res) => {
   try {
     const { year } = req.params;
     const yearNum = parseInt(year);
@@ -818,6 +813,7 @@ app.delete('/admin/exam-dates', requireSuperUser, async (req, res) => {
     res.status(500).json({ error: 'Error deleting exam date' });
   }
 });
+
 // Public route: Get all available years (no auth required)
 app.get('/public/years', async (req, res) => {
   try {
@@ -881,16 +877,41 @@ app.get('/public/exam-dates/:year', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
-const CLASSIFIER_URL = process.env.CLASSIFIER_URL;
-app.listen(PORT, () => {
-  console.log(`Server started on http://localhost:${PORT}`);
-  console.log('Features added:');
-  console.log('✅ Question numbering system (no uniqueness constraint)');
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+// Start server
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server started on port ${PORT}`);
+  console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log('📋 Features enabled:');
+  console.log('✅ Question numbering system');
   console.log('✅ PYQ type classification');
   console.log('✅ JEE MAIN PYQ with shift and year');
   console.log('✅ Enhanced filtering and sorting');
   console.log('✅ Question statistics');
   console.log('✅ CRUD operations for questions');
   console.log('✅ Admin year and exam date management');
+  console.log('✅ Auto-classification integration');
+  
+  if (CLASSIFIER_URL) {
+    console.log(`🤖 Classifier service URL: ${CLASSIFIER_URL}`);
+  } else {
+    console.log('⚠️  CLASSIFIER_URL not set - auto-classification disabled');
+  }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received: closing HTTP server');
+  app.close(() => {
+    console.log('HTTP server closed');
+    mongoose.connection.close(false, () => {
+      console.log('MongoDB connection closed');
+      process.exit(0);
+    });
+  });
 });
