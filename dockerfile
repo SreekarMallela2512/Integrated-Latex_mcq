@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip
-RUN python3 -m pip install --upgrade pip
+RUN python3 -m pip install --upgrade pip setuptools wheel
 
 WORKDIR /app
 
@@ -22,13 +22,12 @@ COPY ./latex-mcq ./latex-mcq
 
 # Install Python dependencies for classifier
 WORKDIR /app/Automated-Question-classify
-# Install specific versions of packages
-RUN pip3 install --no-cache-dir \
-    fastapi==0.104.1 \
-    langchain==0.0.335 \
-    langchain-openai==0.0.2 \
-    pydantic==2.4.2 \
-    uvicorn==0.24.0
+# Install packages one by one to better handle dependencies
+RUN python3 -m pip install --no-cache-dir fastapi==0.104.1 && \
+    python3 -m pip install --no-cache-dir pydantic==2.4.2 && \
+    python3 -m pip install --no-cache-dir uvicorn==0.24.0 && \
+    python3 -m pip install --no-cache-dir langchain==0.0.335 && \
+    python3 -m pip install --no-cache-dir langchain-openai==0.0.2
 
 # Install Node dependencies for latex-mcq
 WORKDIR /app/latex-mcq
