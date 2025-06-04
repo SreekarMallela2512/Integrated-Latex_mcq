@@ -190,6 +190,10 @@ app.get('/auth/status', (req, res) => {
 // MCQ submission route
 app.post('/submit', requireAuth, async (req, res) => {
   try {
+    console.log("=== Submit Request Started ===");
+    console.log("User ID:", req.session.userId);
+    console.log("Request body:", JSON.stringify(req.body, null, 2));
+    
     const { 
       questionNo, question, options, correctOption,
       subject, topic, difficulty: userDifficulty,
@@ -197,13 +201,27 @@ app.post('/submit', requireAuth, async (req, res) => {
       autoClassified
     } = req.body;
 
-    console.log("=== Submit Request ===");
-    console.log("Auto-classified:", autoClassified);
-    console.log("User difficulty:", userDifficulty);
-    console.log("Question preview:", question?.substring(0, 100));
+    // Validate required fields
+    if (!question || !options || options.length !== 4) {
+      console.error("Validation failed: Missing question or options");
+      return res.status(400).json({ error: 'Question and 4 options are required' });
+    }
 
-    // ... validation code ...
+    // Validate PYQ fields if needed
+    if (pyqType === 'JEE MAIN PYQ') {
+      if (!shift || !year) {
+        return res.status(400).json({ error: 'Shift and Year are required for JEE MAIN PYQ questions' });
+      }
+      const yearNum = parseInt(year, 10);
+      if (yearNum < 1000) {
+        return res.status(400).json({ error: 'Invalid year. Year must be a 4-digit number (minimum 1000).' });
+      }
+    }
 
+    const correctOptionIndex = parseInt(correctOption, 10) - 1;
+    console.log("Correct option index:", correctOptionIndex);
+
+    // Build initial mcqData
     const mcqData = {
       questionNo,
       question,
@@ -217,64 +235,73 @@ app.post('/submit', requireAuth, async (req, res) => {
       autoClassified: Boolean(autoClassified)
     };
 
-    // ... PYQ fields code ...
+    console.log("Initial MCQ data:", JSON.stringify(mcqData, null, 2));
+
+    // Add PYQ-specific fields
+    if (pyqType === 'JEE MAIN PYQ') {
+      mcqData.shift = shift;
+      mcqData.year = parseInt(year, 10);
+      if (examDate) mcqData.examDate = new Date(examDate);
+    }
 
     // Auto-classification step
     if (mcqData.autoClassified && CLASSIFIER_URL) {
       try {
-        console.log("🔄 Starting classification...");
-        console.log("URL:", `${CLASSIFIER_URL}/classify`);
-        console.log("Session ID:", req.sessionID);
-        
-        const classifyPayload = {
-          session_id: req.sessionID,
-          question: question
-        };
-        
+        console.log("Starting auto-classification...");
         const resp = await axios.post(
           `${CLASSIFIER_URL}/classify`,
-          classifyPayload,
-          { 
-            timeout: 30000,
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          }
+          { session_id: req.sessionID, question },
+          { timeout: 45000 }
         );
-        
-        console.log("✅ Classification response:", resp.data);
         mcqData.difficulty = resp.data.difficulty;
-        
+        console.log("✅ Auto-classified as:", mcqData.difficulty);
       } catch (err) {
-        console.error("❌ Classification error details:");
-        console.error("Message:", err.message);
-        console.error("Code:", err.code);
-        if (err.response) {
-          console.error("Response status:", err.response.status);
-          console.error("Response data:", err.response.data);
-        }
-        // Fallback to user difficulty
-        mcqData.difficulty = userDifficulty || 'Medium';
+        console.error("⚠️ Auto-classify failed:", err.message);
+        // Keep user-provided difficulty
       }
     }
 
-    // Save to database
-    const mcq = new MCQ(mcqData);
-    await mcq.save();
+    console.log("Final MCQ data before save:", JSON.stringify(mcqData, null, 2));
 
-    res.json({ 
-      message: "Question added successfully!",
-      questionId: mcq._id,
-      difficulty: mcqData.difficulty,
-      wasAutoClassified: mcqData.autoClassified
-    });
+    // Persist to MongoDB
+    try {
+      const mcq = new MCQ(mcqData);
+      console.log("Created MCQ instance");
+      
+      const savedMcq = await mcq.save();
+      console.log("✅ Successfully saved MCQ with ID:", savedMcq._id);
+
+      res.json({ 
+        message: "Question added successfully!",
+        questionId: savedMcq._id,
+        difficulty: mcqData.difficulty,
+        wasAutoClassified: mcqData.autoClassified
+      });
+
+    } catch (mongoError) {
+      console.error("❌ MongoDB Save Error:");
+      console.error("Error name:", mongoError.name);
+      console.error("Error message:", mongoError.message);
+      console.error("Validation errors:", mongoError.errors);
+      console.error("Full error:", mongoError);
+      
+      // Send more specific error message
+      if (mongoError.name === 'ValidationError') {
+        const errors = Object.keys(mongoError.errors).map(key => 
+          `${key}: ${mongoError.errors[key].message}`
+        ).join(', ');
+        return res.status(400).json({ error: `Validation failed: ${errors}` });
+      }
+      
+      throw mongoError; // Re-throw to be caught by outer catch
+    }
 
   } catch (err) {
-    console.error('❌ Submit error:', err);
+    console.error('❌ Submit endpoint error:', err);
+    console.error('Stack trace:', err.stack);
     res.status(500).json({ error: "Error saving question. Please try again." });
   }
 });
-
 // Get questions based on user role with enhanced filtering and sorting
 app.get('/questions', requireAuth, async (req, res) => {
   try {
