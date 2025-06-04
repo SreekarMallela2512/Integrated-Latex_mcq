@@ -11,7 +11,7 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Copy both projects
-COPY ./Automated-Question-Classify ./Automated-Question-classify
+COPY ./Automated-Question-classify ./Automated-Question-classify
 COPY ./latex-mcq ./latex-mcq
 
 # Install Python dependencies
