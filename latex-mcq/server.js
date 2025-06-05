@@ -996,12 +996,13 @@ app.post('/api/classify', requireAuth, async (req, res) => {
   }
 });
 // Add this route to your Express server
-app.get('/questions/count/:baseSerial', authenticate, async (req, res) => {
+// Add this route to count questions with a base serial number
+app.get('/questions/count/:baseSerial', requireAuth, async (req, res) => {
   try {
     const { baseSerial } = req.params;
     
     // Count questions that start with this base serial
-    const count = await Question.countDocuments({
+    const count = await MCQ.countDocuments({
       questionNo: { $regex: `^${baseSerial}`, $options: 'i' }
     });
     
