@@ -66,9 +66,11 @@
     <h1>Submit MCQ (LaTeX Supported)</h1>
 
     <form id="mcqForm" method="POST">
-      <label>Question Number:</label>
-      <input type="text" name="questionNo" id="questionNo" placeholder="e.g., Q1, 1, A-1, etc." required />
-
+    <label>Question Number:</label>
+<input type="text" name="questionNo" id="questionNo" placeholder="e.g., Q1, 1, A-1, etc." required />
+<span id="serialNumberInfo" style="font-size: 0.8em; color: #666; display: block; margin-top: 5px;">
+  For PYQ questions, this will be auto-generated
+</span>
       <label>Question (LaTeX):</label>
       <textarea name="question" id="question" rows="3" oninput="renderLatex()" required></textarea>
       <h3>Preview:</h3>
@@ -138,23 +140,23 @@
 </select>
           <!-- Exam Date selection -->
           <label for="examDate">Exam Date:</label>
-          <select name="examDate" id="examDate">
-            <option value="">-- Select Exam Date --</option>
-          </select>
+<select name="examDate" id="examDate" onchange="updateQuestionNumber()">
+  <option value="">-- Select Exam Date --</option>
+</select>
           <!-- Shift selection -->
           <div id="shiftSection">
-            <label>Shift:</label>
-            <div class="radio-group">
-              <label class="radio-label">
-                <input type="radio" name="shift" value="Shift 1" />
-                Shift 1
-              </label>
-              <label class="radio-label">
-                <input type="radio" name="shift" value="Shift 2" />
-                Shift 2
-              </label>
-            </div>
-          </div>
+  <label>Shift:</label>
+  <div class="radio-group">
+    <label class="radio-label">
+      <input type="radio" name="shift" value="Shift 1" onchange="updateQuestionNumber()" />
+      Shift 1
+    </label>
+    <label class="radio-label">
+      <input type="radio" name="shift" value="Shift 2" onchange="updateQuestionNumber()" />
+      Shift 2
+    </label>
+  </div>
+</div>
 
         </div>
       </div>
@@ -309,7 +311,103 @@
     const chemistryTopics = ["Some Basic Concepts of Chemistry (Mole Concept)", "Atomic Structure", "Chemical Bonding and Molecular Structure", "Chemical Thermodynamics", "Solutions", "Equilibrium", "Redox Reactions and Electrochemistry", "Chemical Kinetics", "Surface Chemistry", "Classification of Elements and Periodicity in Properties", "General Principles and Processes of Isolation of Metals", "Hydrogen", "S-block elements (Alkali and Alkaline earth metals)", "P-block elements", "D and F block elements", "Coordination Compounds", "Environmental Chemistry", "Organic Chemistry – Basic Principles and Techniques", "Hydrocarbons", "Haloalkanes and Haloarenes", "Alcohols, Phenols, and Ethers", "Aldehydes, Ketones, and Carboxylic Acids", "Organic Compounds Containing Nitrogen", "Polymers", "Biomolecules"];
 
     const mathsTopics = ["Sets, Relations and Functions", "Complex Numbers and Quadratic Equations", "Matrices and Determinants", "Permutations and Combinations", "Mathematical Induction", "Binomial Theorem", "Sequences and Series", "Limits, Continuity and Differentiability", "Integral Calculus", "Differential Equations", "Coordinate Geometry", "3D Geometry", "Vector Algebra", "Statistics and Probability", "Trigonometry", "Mathematical Reasoning"];
+    // Add these variables at the top with other global variables
+let questionCountCache = {};
+
+// Function to generate unique serial number
+async function generateUniqueSerialNumber() {
+  const pyqType = document.getElementById('pyqType').value;
+  
+  // Only generate for PYQ questions
+  if (pyqType !== 'JEE MAIN PYQ') {
+    return null;
+  }
+  
+  const year = document.getElementById('year').value;
+  const examDate = document.getElementById('examDate').value;
+  const shiftRadio = document.querySelector('input[name="shift"]:checked');
+  
+  if (!year || !examDate || !shiftRadio) {
+    return null;
+  }
+  
+  const shift = shiftRadio.value;
+  
+  // Format the date (MMDD)
+  const dateObj = new Date(examDate);
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  const dateStr = `${month}${day}`;
+  
+  // Format shift (S1 or S2)
+  const shiftCode = shift === 'Shift 1' ? 'S1' : 'S2';
+  
+  // Create base serial format: YYYY-MMDD-SX
+  const baseSerial = `${year}-${dateStr}-${shiftCode}`;
+  
+  try {
+    // Get count of existing questions with this base serial
+    const response = await fetch(`/questions/count/${encodeURIComponent(baseSerial)}`);
+    let count = 1;
     
+    if (response.ok) {
+      const data = await response.json();
+      count = (data.count || 0) + 1;
+    }
+    
+    // Generate the full serial number: YYYY-MMDD-SX-XXX
+    const serialNumber = `${baseSerial}-${String(count).padStart(3, '0')}`;
+    
+    return serialNumber;
+  } catch (error) {
+    console.error('Error generating serial number:', error);
+    // Fallback serial number
+    const timestamp = Date.now().toString().slice(-4);
+    return `${baseSerial}-${timestamp}`;
+  }
+}
+
+// Function to update question number field
+async function updateQuestionNumber() {
+  const pyqType = document.getElementById('pyqType').value;
+  const questionNoInput = document.getElementById('questionNo');
+  
+  if (pyqType === 'JEE MAIN PYQ') {
+    // Check if all required fields are filled
+    const year = document.getElementById('year').value;
+    const examDate = document.getElementById('examDate').value;
+    const shiftRadio = document.querySelector('input[name="shift"]:checked');
+    
+    if (year && examDate && shiftRadio) {
+      // Generate serial number
+      const serialNumber = await generateUniqueSerialNumber();
+      
+      if (serialNumber) {
+        questionNoInput.value = serialNumber;
+        questionNoInput.readOnly = true;
+        questionNoInput.style.backgroundColor = '#f0f0f0';
+        questionNoInput.style.cursor = 'not-allowed';
+        
+        // Add visual feedback
+        questionNoInput.style.borderColor = '#4caf50';
+        setTimeout(() => {
+          questionNoInput.style.borderColor = '';
+        }, 2000);
+      }
+    } else {
+      // Clear the field if required fields are not complete
+      questionNoInput.value = '';
+      questionNoInput.placeholder = 'Complete PYQ details to generate';
+    }
+  } else {
+    // For non-PYQ questions, allow manual input
+    questionNoInput.value = '';
+    questionNoInput.readOnly = false;
+    questionNoInput.style.backgroundColor = '';
+    questionNoInput.style.cursor = '';
+    questionNoInput.placeholder = 'e.g., Q1, 1, A-1, etc.';
+  }
+}
     // Function to edit a question (superuser only)
     async function editQuestion(questionId) {
       if (currentUser.role !== 'superuser') {
@@ -476,63 +574,77 @@
     }
 
     // Populate exam dates based on selected year
-    async function populateExamDates() {
-      const year = document.getElementById('year').value;
-      const examDateSelect = document.getElementById('examDate');
+   async function populateExamDates() {
+  const year = document.getElementById('year').value;
+  const examDateSelect = document.getElementById('examDate');
 
-      // Clear existing options
-      examDateSelect.innerHTML = '<option value="">-- Select Exam Date --</option>';
+  // Clear existing options
+  examDateSelect.innerHTML = '<option value="">-- Select Exam Date --</option>';
 
-      if (!year) {
-        examDateSelect.required = false;
-        return;
-      }
+  if (!year) {
+    examDateSelect.required = false;
+    updateQuestionNumber(); // Update serial number
+    return;
+  }
 
-      try {
-        // Always use public endpoint for exam dates
-        const response = await fetch(`/public/exam-dates/${year}`);
-        if (!response.ok) throw new Error('Failed to load exam dates');
+  try {
+    // Always use public endpoint for exam dates
+    const response = await fetch(`/public/exam-dates/${year}`);
+    if (!response.ok) throw new Error('Failed to load exam dates');
 
-        const examDates = await response.json();
-        examDates.forEach(dateObj => {
-          const option = document.createElement('option');
-          option.value = dateObj.date;
-          option.textContent = dateObj.label;
-          examDateSelect.appendChild(option);
-        });
+    const examDates = await response.json();
+    examDates.forEach(dateObj => {
+      const option = document.createElement('option');
+      option.value = dateObj.date;
+      option.textContent = dateObj.label;
+      examDateSelect.appendChild(option);
+    });
 
-        examDateSelect.required = true;
-      } catch (err) {
-        console.error('Error loading exam dates:', err);
-        examDateSelect.required = false;
-      }
-    }
+    examDateSelect.required = true;
+  } catch (err) {
+    console.error('Error loading exam dates:', err);
+    examDateSelect.required = false;
+  }
+  
+  // Update serial number
+  updateQuestionNumber();
+}
 
        // Toggle PYQ fields based on selection
     function togglePyqFields() {
-      const pyqType = document.getElementById('pyqType').value;
-      const pyqDetails = document.getElementById('pyqDetails');
-      const yearSelect = document.getElementById('year');
-      const examDateSelect = document.getElementById('examDate');
-      
-      if (pyqType === 'Not PYQ') {
-        pyqDetails.style.display = 'none';
-        yearSelect.required = false;
-        examDateSelect.required = false;
-        // Clear radio buttons
-        document.querySelectorAll('input[name="shift"]').forEach(radio => {
-          radio.checked = false;
-          radio.required = false;
-        });
-      } else {
-        pyqDetails.style.display = 'block';
-        yearSelect.required = true;
-        document.querySelectorAll('input[name="shift"]').forEach(radio => {
-          radio.required = true;
-        });
-      }
-    }
-
+  const pyqType = document.getElementById('pyqType').value;
+  const pyqDetails = document.getElementById('pyqDetails');
+  const yearSelect = document.getElementById('year');
+  const examDateSelect = document.getElementById('examDate');
+  const questionNoInput = document.getElementById('questionNo');
+  
+  if (pyqType === 'Not PYQ') {
+    pyqDetails.style.display = 'none';
+    yearSelect.required = false;
+    examDateSelect.required = false;
+    // Clear radio buttons
+    document.querySelectorAll('input[name="shift"]').forEach(radio => {
+      radio.checked = false;
+      radio.required = false;
+    });
+    
+    // Reset question number field for manual input
+    questionNoInput.value = '';
+    questionNoInput.readOnly = false;
+    questionNoInput.style.backgroundColor = '';
+    questionNoInput.style.cursor = '';
+    questionNoInput.placeholder = 'e.g., Q1, 1, A-1, etc.';
+  } else {
+    pyqDetails.style.display = 'block';
+    yearSelect.required = true;
+    document.querySelectorAll('input[name="shift"]').forEach(radio => {
+      radio.required = true;
+    });
+    
+    // Update question number when PYQ is selected
+    updateQuestionNumber();
+  }
+}
     // Logout functionality
     document.getElementById('logoutBtn').addEventListener('click', async () => {
       try {
@@ -656,30 +768,37 @@ function renderOptionLatex(num) {
     }
 
     function clearForm() {
-      document.getElementById('mcqForm').reset();
-      document.getElementById('preview').innerHTML = '';
-      // Clear option previews
-      for (let i = 1; i <= 4; i++) {
-        document.getElementById(`preview-option${i}`).innerHTML = '';
-      }
-      // Reset difficulty field
-      document.getElementById('difficulty').value = '';
-      document.getElementById('difficulty').placeholder = 'Will be auto-classified...';
-      if (document.getElementById('classificationStatus')) {
-        document.getElementById('classificationStatus').textContent = '';
-      }
-      // Hide PYQ details
-      document.getElementById('pyqDetails').style.display = 'none';
-      // Clear exam date options
-      document.getElementById('examDate').innerHTML = '<option value="">-- Select Exam Date --</option>';
-      
-      // Hide cancel button if in edit mode
-      const cancelBtn = document.getElementById('cancelEditBtn');
-      if (cancelBtn) {
-        cancelBtn.style.display = editMode ? 'inline-block' : 'none';
-      }
-    }
-
+  document.getElementById('mcqForm').reset();
+  document.getElementById('preview').innerHTML = '';
+  // Clear option previews
+  for (let i = 1; i <= 4; i++) {
+    document.getElementById(`preview-option${i}`).innerHTML = '';
+  }
+  // Reset difficulty field
+  document.getElementById('difficulty').value = '';
+  document.getElementById('difficulty').placeholder = 'Will be auto-classified...';
+  if (document.getElementById('classificationStatus')) {
+    document.getElementById('classificationStatus').textContent = '';
+  }
+  // Hide PYQ details
+  document.getElementById('pyqDetails').style.display = 'none';
+  // Clear exam date options
+  document.getElementById('examDate').innerHTML = '<option value="">-- Select Exam Date --</option>';
+  
+  // Reset question number field
+  const questionNoInput = document.getElementById('questionNo');
+  questionNoInput.value = '';
+  questionNoInput.readOnly = false;
+  questionNoInput.style.backgroundColor = '';
+  questionNoInput.style.cursor = '';
+  questionNoInput.placeholder = 'e.g., Q1, 1, A-1, etc.';
+  
+  // Hide cancel button if in edit mode
+  const cancelBtn = document.getElementById('cancelEditBtn');
+  if (cancelBtn) {
+    cancelBtn.style.display = editMode ? 'inline-block' : 'none';
+  }
+}
     function updateTopics() {
       const subject = document.getElementById("subject").value;
       const topicSelect = document.getElementById("topic");

@@ -995,6 +995,22 @@ app.post('/api/classify', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Classification failed' });
   }
 });
+// Add this route to your Express server
+app.get('/questions/count/:baseSerial', authenticate, async (req, res) => {
+  try {
+    const { baseSerial } = req.params;
+    
+    // Count questions that start with this base serial
+    const count = await Question.countDocuments({
+      questionNo: { $regex: `^${baseSerial}`, $options: 'i' }
+    });
+    
+    res.json({ count });
+  } catch (error) {
+    console.error('Error counting questions:', error);
+    res.status(500).json({ error: 'Failed to count questions' });
+  }
+});
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server started on port ${PORT}`);
