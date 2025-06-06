@@ -1477,3 +1477,11 @@ button[onclick*="reclassify"]:hover {
   background: #a3b1c6;
   border-radius: 3px;
 }
+#preview {
+  /* ... existing styles ... */
+  vertical-align: middle;
+}
+
+#preview .MathJax {
+  vertical-align: middle;
+}
