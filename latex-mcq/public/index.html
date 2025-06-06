@@ -377,44 +377,28 @@ async function generateUniqueSerialNumber() {
 // Function to render solution LaTeX
 function renderSolutionLatex() {
   clearTimeout(previewTimeout);
-  
+
   previewTimeout = setTimeout(() => {
     const input = document.getElementById('solution').value.trim();
     const preview = document.getElementById('solution-preview');
-    
+
     if (!input) {
       preview.innerHTML = '<em style="color: #777;">Solution preview will appear here...</em>';
       return;
     }
-    
-    // HTML escape and LaTeX processing
-    let escaped = input
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    
-    // Support newlines
-    escaped = escaped.replace(/\n/g, '<br>');
-    
-    // Process LaTeX - display math
-    escaped = escaped.replace(/\$\$([\s\S]+?)\$\$/g, (_, match) => `\$$${match.trim()}\$$`);
-    
-    // Process LaTeX - inline math
-    escaped = escaped.replace(/\$([^\$]+?)\$/g, (_, match) => `\$$${match.trim()}\$$`);
-    
-    preview.innerHTML = escaped;
-    
+
+    // Process LaTeX content
+    let processed = processLatexContent(input);
+    preview.innerHTML = processed;
+
     // Render with MathJax
-    if (window.MathJax) {
-      MathJax.typesetClear([preview]);
-      MathJax.typesetPromise([preview]).catch(err => {
-        preview.innerHTML = '<span style="color:red;">LaTeX rendering error.</span>';
-        console.error('MathJax error:', err);
-      });
-    }
+    MathJax.typesetClear([preview]);
+    MathJax.typesetPromise([preview]).catch(err => {
+      preview.innerHTML = '<span style="color:red;">LaTeX rendering error.</span>';
+      console.error('MathJax error:', err);
+    });
   }, 500);
 }
-
 // Function to update question number field
 async function updateQuestionNumber() {
   const pyqType = document.getElementById('pyqType').value;
