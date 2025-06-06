@@ -792,8 +792,16 @@ function renderOptionLatex(num) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
   
-  // Ensure LaTeX is properly wrapped
-  escaped = escaped.replace(/\$([^$]+)\$/g, '\$$$1\$$');
+  // Convert single $ to double \$$ for MathJax
+  // First handle display math $$...$$
+  escaped = escaped.replace(/\$\$([\s\S]+?)\$\$/g, (_, match) => {
+    return '\\$$' + match.trim() + '\\$$';
+  });
+  
+  // Then handle inline math $...$
+  escaped = escaped.replace(/\$([^\$]+?)\$/g, (_, match) => {
+    return '\\$$' + match.trim() + '\\$$';
+  });
   
   // Set the content
   preview.innerHTML = escaped;
@@ -811,7 +819,8 @@ function renderOptionLatex(num) {
       preview.innerHTML = escaped; // Fallback to escaped text
     }
   }
-}function showSuccess() {
+}
+function showSuccess() {
       const msg = document.getElementById("successMessage");
       msg.textContent = "✅ Question submitted successfully!";
       msg.style.color = "green";
@@ -1251,19 +1260,25 @@ function displayFilteredQuestions() {
     const classificationBadge = q.autoClassified ? 
       '<span class="badge auto-classified">🤖 Auto-classified</span>' : '';
 
-    // Process LaTeX in question and options
-    let questionHtml = processLatexForDisplay(highlightSearchTerm(q.question));
-    let optionsHtml = q.options.map((opt, idx) => {
-      let optionHtml = processLatexForDisplay(highlightSearchTerm(opt));
-      return `<li${idx === q.correctOption ? ' style="font-weight:bold;color:green;"' : ''}>${String.fromCharCode(65 + idx)}. ${optionHtml}</li>`;
+    // Process question text with LaTeX
+    const processedQuestion = processTextForDisplay(q.question);
+    
+    // Process options with LaTeX
+    const processedOptions = q.options.map((opt, idx) => {
+      const processedOpt = processTextForDisplay(opt);
+      const isCorrect = idx === q.correctOption;
+      return `<li${isCorrect ? ' style="font-weight:bold;color:green;"' : ''}>${String.fromCharCode(65 + idx)}. ${processedOpt}</li>`;
     }).join('');
+
+    // Process solution if exists
+    const processedSolution = q.solution ? processTextForDisplay(q.solution) : '';
 
     div.innerHTML = `
       <div class="question-header">
         <strong>Question No: ${highlightSearchTerm(q.questionNo)}</strong>
       </div>
-      <strong>Q${i + 1}:</strong> ${questionHtml}<br/>
-      <ul>${optionsHtml}</ul>
+      <strong>Q${i + 1}:</strong> ${processedQuestion}<br/>
+      <ul>${processedOptions}</ul>
       <div class="question-meta">
         <em>Subject:</em> ${q.subject},
         <em>Topic:</em> ${q.topic},
@@ -1274,8 +1289,8 @@ function displayFilteredQuestions() {
       ${q.solution ? `
         <div class="solution-section">
           <strong>Solution:</strong>
-          <div class="solution-content" id="solution-${q._id}">
-            ${processSolutionLatex(q.solution)}
+          <div class="solution-content">
+            ${processedSolution}
           </div>
         </div>
       ` : ''}
@@ -1287,37 +1302,51 @@ function displayFilteredQuestions() {
     list.appendChild(div);
   });
 
-  // Re-render MathJax with proper configuration
+  // Render MathJax for all questions
   if (window.MathJax) {
-    // Reset MathJax
-    MathJax.startup.document.clear();
-    MathJax.startup.document.updateDocument();
-    
-    // Process the entire list
+    MathJax.typesetClear([list]);
     MathJax.typesetPromise([list]).then(() => {
-      console.log('MathJax rendering complete');
+      console.log('MathJax rendering complete for question list');
     }).catch((err) => {
       console.error('MathJax rendering error:', err);
     });
   }
 }
-
 // Add this helper function to process LaTeX for display
-function processLatexForDisplay(text) {
+function processTextForDisplay(text) {
   if (!text) return '';
   
-  // Escape HTML but preserve LaTeX delimiters
+  // HTML escape
   let processed = text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
   
-  // Convert LaTeX delimiters for MathJax
-  // Display math: $$...$$ 
-  processed = processed.replace(/\$\$([\s\S]+?)\$\$/g, '\$$$1\$$');
+  // Support newlines in solutions
+  processed = processed.replace(/\n/g, '<br>');
   
-  // Inline math: $...$
-  processed = processed.replace(/\$([^\$]+?)\$/g, '\$$$1\$$');
+  // Process display math - matching your existing pattern
+  processed = processed.replace(/\$\$([\s\S]+?)\$\$/g, (_, match) => `\$$${match.trim()}\$$`);
+  
+  // Process inline math - matching your existing pattern
+  processed = processed.replace(/\$([^\$]+?)\$/g, (_, match) => `\$$${match.trim()}\$$`);
+  
+  // Apply search highlighting if needed
+  if (currentSearchTerm) {
+    const escapedTerm = currentSearchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escapedTerm})`, 'gi');
+    // Only highlight outside of LaTeX delimiters
+    processed = processed.replace(regex, (match, p1, offset, string) => {
+      // Check if we're inside LaTeX delimiters
+      const beforeMatch = string.substring(0, offset);
+      const dollarSignsBefore = (beforeMatch.match(/\$\$/g) || []).length;
+      if (dollarSignsBefore % 2 === 1) {
+        // We're inside LaTeX, don't highlight
+        return match;
+      }
+      return '<span class="search-highlight">' + match + '</span>';
+    });
+  }
   
   return processed;
 }
