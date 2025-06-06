@@ -1439,3 +1439,41 @@ button[onclick*="reclassify"]:hover {
   background: #a3b1c6;
   border-radius: 3px;
 }
+#preview {
+  border: 2px dashed #a3b1c6;
+  background: #f0f5fc;
+  padding: 18px;
+  border-radius: 14px;
+  min-height: 60px;
+  color: #34495e;
+  font-size: 18px;
+  font-style: italic;
+  margin-top: 12px;
+  user-select: none;
+  overflow-x: auto;
+  max-width: 100%;
+  word-wrap: break-word;
+}
+
+#preview .MathJax_Display {
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  max-width: 100% !important;
+  margin: 0.5em 0 !important;
+  font-size: 0.9em !important;
+}
+
+#preview .MathJax {
+  display: inline-block !important;
+  max-width: 100% !important;
+}
+
+/* Handle scrollbar for math content */
+#preview::-webkit-scrollbar {
+  height: 6px;
+}
+
+#preview::-webkit-scrollbar-thumb {
+  background: #a3b1c6;
+  border-radius: 3px;
+}

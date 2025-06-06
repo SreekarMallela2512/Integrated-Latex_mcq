@@ -690,7 +690,7 @@ async function updateQuestionNumber() {
 
     let previewTimeout;
 
-   function renderLatex() {
+ function renderLatex() {
   clearTimeout(previewTimeout);
 
   previewTimeout = setTimeout(async () => {
@@ -755,6 +755,20 @@ async function updateQuestionNumber() {
       }
     }
   }, 800);
+}
+
+// Unified LaTeX processing function
+function processLatexContent(input) {
+  // First, escape HTML to prevent XSS
+  let escaped = input.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  
+  // Handle various LaTeX formats
+  escaped = escaped.replace(/\$\$([\s\S]+?)\$\$/g, (_, match) => `\$$${match.trim()}\$$`);
+  escaped = escaped.replace(/\\$$(.+?)\\$$/gs, (_, match) => `\$$${match.trim()}\$$`);
+  escaped = escaped.replace(/(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)/gs, (_, match) => `\$$${match.trim()}\$$`);
+  escaped = escaped.replace(/\\$$(.+?)\\$$/gs, (_, match) => `\$$${match.trim()}\$$`);
+  
+  return escaped;
 }
 
 function renderOptionLatex(num) {
