@@ -786,41 +786,19 @@ function renderOptionLatex(num) {
     return;
   }
 
-  // HTML escape
-  let escaped = input
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  
-  // Convert single $ to double \$$ for MathJax
-  // First handle display math $$...$$
-  escaped = escaped.replace(/\$\$([\s\S]+?)\$\$/g, (_, match) => {
-    return '\\$$' + match.trim() + '\\$$';
-  });
-  
-  // Then handle inline math $...$
-  escaped = escaped.replace(/\$([^\$]+?)\$/g, (_, match) => {
-    return '\\$$' + match.trim() + '\\$$';
-  });
-  
-  // Set the content
+  // LaTeX rendering - matching renderLatex exactly
+  let escaped = input.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  escaped = escaped.replace(/\$\$(.+?)\$\$/gs, (_, match) => `\$$${match.trim()}\$$`);
+  escaped = escaped.replace(/(^|[^\\])\$(.+?)\$/g, (_, prefix, match) => `${prefix}\$$${match.trim()}\$$`);
+
   preview.innerHTML = escaped;
 
-  // Render with MathJax
-  if (window.MathJax) {
-    try {
-      MathJax.typesetClear([preview]);
-      MathJax.typesetPromise([preview]).catch(err => {
-        console.error(`MathJax error for option ${num}:`, err);
-        preview.innerHTML = escaped; // Fallback to escaped text
-      });
-    } catch (error) {
-      console.error('MathJax rendering error:', error);
-      preview.innerHTML = escaped; // Fallback to escaped text
-    }
-  }
-}
-function showSuccess() {
+  MathJax.typesetClear([preview]);
+  MathJax.typesetPromise([preview]).catch(err => {
+    preview.innerHTML = '<span style="color:red;">LaTeX rendering error.</span>';
+    console.error(`MathJax error for option ${num}:`, err);
+  });
+}function showSuccess() {
       const msg = document.getElementById("successMessage");
       msg.textContent = "✅ Question submitted successfully!";
       msg.style.color = "green";
