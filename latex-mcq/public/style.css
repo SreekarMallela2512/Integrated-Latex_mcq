@@ -1322,3 +1322,87 @@ button[onclick*="reclassify"]:hover {
   resize: vertical;
   min-height: 150px;
 }
+/* Fix LaTeX overflow in preview */
+#preview {
+  border: 2px dashed #a3b1c6;
+  background: #f0f5fc;
+  padding: 18px;
+  border-radius: 14px;
+  min-height: 60px;
+  color: #34495e;
+  font-size: 18px;
+  font-style: italic;
+  margin-top: 12px;
+  user-select: none;
+  
+  /* Add these properties to handle overflow */
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  word-wrap: break-word;
+}
+
+/* Handle MathJax/LaTeX content specifically */
+#preview .MathJax_Display,
+#preview .MathJax,
+#preview .katex-display,
+#preview .katex {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  margin: 10px 0;
+}
+
+/* For inline math */
+#preview .MathJax_Preview {
+  color: inherit !important;
+}
+
+/* Scale down large equations if needed */
+#preview .MathJax_Display {
+  font-size: 0.9em !important;
+}
+
+/* Add scrollbar styling for better UX */
+#preview::-webkit-scrollbar {
+  height: 8px;
+}
+
+#preview::-webkit-scrollbar-track {
+  background: #e9ecef;
+  border-radius: 4px;
+}
+
+#preview::-webkit-scrollbar-thumb {
+  background: #a3b1c6;
+  border-radius: 4px;
+}
+
+#preview::-webkit-scrollbar-thumb:hover {
+  background: #8690a0;
+}
+
+/* For solution preview as well */
+.solution-preview {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 15px;
+  background-color: #f9f9f9;
+  min-height: 60px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+  max-width: 100%;
+  word-wrap: break-word;
+}
+
+/* Responsive handling for mobile */
+@media (max-width: 768px) {
+  #preview .MathJax_Display {
+    font-size: 0.8em !important;
+  }
+  
+  #preview {
+    font-size: 16px;
+    padding: 12px;
+  }
+}
