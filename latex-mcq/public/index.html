@@ -706,77 +706,73 @@ async function updateQuestionNumber() {
 
     let previewTimeout;
 
-    function renderLatex() {
-      clearTimeout(previewTimeout);
+   function renderLatex() {
+  clearTimeout(previewTimeout);
 
-      previewTimeout = setTimeout(async () => {
-        const input = document.getElementById('question').value.trim();
-        const preview = document.getElementById('preview');
+  previewTimeout = setTimeout(async () => {
+    const input = document.getElementById('question').value.trim();
+    const preview = document.getElementById('preview');
 
-        if (!input) {
-          preview.innerHTML = '<em style="color: #777;">Preview will appear here...</em>';
-          return;
+    if (!input) {
+      preview.innerHTML = '<em style="color: #777;">Preview will appear here...</em>';
+      return;
+    }
+
+    // Process LaTeX content
+    let processed = processLatexContent(input);
+    preview.innerHTML = processed;
+
+    // Render with MathJax
+    MathJax.typesetClear([preview]);
+    MathJax.typesetPromise([preview]).catch(err => {
+      preview.innerHTML = '<span style="color:red;">LaTeX rendering error.</span>';
+      console.error('MathJax error:', err);
+    });
+
+    // Auto-classification logic
+    if (input.length > 30 && !editMode) {
+      const difficultyInput = document.getElementById('difficulty');
+      const difficultyStatus = document.getElementById('classificationStatus');
+      
+      if (!difficultyInput.value || difficultyInput.value === '') {
+        if (difficultyStatus) {
+          difficultyStatus.textContent = '(Classifying...)';
+          difficultyStatus.style.color = '#1976d2';
         }
-
-        // LaTeX rendering
-        let escaped = input.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        escaped = escaped.replace(/\$\$(.+?)\$\$/gs, (_, match) => `\$$${match.trim()}\$$`);
-        escaped = escaped.replace(/(^|[^\\])\$(.+?)\$/g, (_, prefix, match) => `${prefix}\$$${match.trim()}\$$`);
-
-        preview.innerHTML = escaped;
-
-        MathJax.typesetClear([preview]);
-        MathJax.typesetPromise([preview]).catch(err => {
-          preview.innerHTML = '<span style="color:red;">LaTeX rendering error.</span>';
-          console.error('MathJax error:', err);
-        });
-
-        // Auto-classification logic
-        if (input.length > 30 && !editMode) {
-          const difficultyInput = document.getElementById('difficulty');
-          const difficultyStatus = document.getElementById('classificationStatus');
+        
+        try {
+          const difficulty = await classifyDifficulty(input);
           
-          // Don't reclassify if already has a value (unless it's being edited)
-          if (!difficultyInput.value || difficultyInput.value === '') {
+          if (difficulty) {
+            difficultyInput.value = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+            
             if (difficultyStatus) {
-              difficultyStatus.textContent = '(Classifying...)';
-              difficultyStatus.style.color = '#1976d2';
+              difficultyStatus.textContent = '✓ Auto-classified';
+              difficultyStatus.style.color = '#4caf50';
             }
             
-            try {
-              const difficulty = await classifyDifficulty(input);
-              
-              if (difficulty) {
-                // Capitalize first letter
-                difficultyInput.value = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
-                
-                if (difficultyStatus) {
-                  difficultyStatus.textContent = '✓ Auto-classified';
-                  difficultyStatus.style.color = '#4caf50';
-                }
-                
-                // Visual feedback
-                difficultyInput.style.backgroundColor = '#e8f5e9';
-                setTimeout(() => {
-                  difficultyInput.style.backgroundColor = '#f0f0f0';
-                }, 2000);
-              } else {
-                if (difficultyStatus) {
-                  difficultyStatus.textContent = '❌ Classification failed';
-                  difficultyStatus.style.color = '#f44336';
-                }
-              }
-            } catch (error) {
-              console.error('Classification error:', error);
-              if (difficultyStatus) {
-                difficultyStatus.textContent = '❌ Classification error';
-                difficultyStatus.style.color = '#f44336';
-              }
+            difficultyInput.style.backgroundColor = '#e8f5e9';
+            setTimeout(() => {
+              difficultyInput.style.backgroundColor = '#f0f0f0';
+            }, 2000);
+          } else {
+            if (difficultyStatus) {
+              difficultyStatus.textContent = '❌ Classification failed';
+              difficultyStatus.style.color = '#f44336';
             }
           }
+        } catch (error) {
+          console.error('Classification error:', error);
+          if (difficultyStatus) {
+            difficultyStatus.textContent = '❌ Classification error';
+            difficultyStatus.style.color = '#f44336';
+          }
         }
-      }, 800); // Increased timeout to avoid too many API calls
+      }
     }
+  }, 800);
+}
+
 function renderOptionLatex(num) {
   const input = document.getElementById(`option${num}`).value.trim();
   const preview = document.getElementById(`preview-option${num}`);
@@ -786,19 +782,32 @@ function renderOptionLatex(num) {
     return;
   }
 
-  // LaTeX rendering - matching renderLatex exactly
-  let escaped = input.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  escaped = escaped.replace(/\$\$(.+?)\$\$/gs, (_, match) => `\$$${match.trim()}\$$`);
-  escaped = escaped.replace(/(^|[^\\])\$(.+?)\$/g, (_, prefix, match) => `${prefix}\$$${match.trim()}\$$`);
+  // Process LaTeX content
+  let processed = processLatexContent(input);
+  preview.innerHTML = processed;
 
-  preview.innerHTML = escaped;
-
+  // Render with MathJax
   MathJax.typesetClear([preview]);
   MathJax.typesetPromise([preview]).catch(err => {
     preview.innerHTML = '<span style="color:red;">LaTeX rendering error.</span>';
     console.error(`MathJax error for option ${num}:`, err);
   });
-}function showSuccess() {
+}
+
+// Unified LaTeX processing function
+function processLatexContent(input) {
+  // First, escape HTML to prevent XSS
+  let escaped = input.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  
+  // Handle various LaTeX formats
+  escaped = escaped.replace(/\$\$([\s\S]+?)\$\$/g, (_, match) => `\$$${match.trim()}\$$`);
+  escaped = escaped.replace(/\\$$(.+?)\\$$/gs, (_, match) => `\$$${match.trim()}\$$`);
+  escaped = escaped.replace(/(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)/gs, (_, match) => `\$$${match.trim()}\$$`);
+  escaped = escaped.replace(/\\$$(.+?)\\$$/gs, (_, match) => `\$$${match.trim()}\$$`);
+  
+  return escaped;
+} 
+function showSuccess() {
       const msg = document.getElementById("successMessage");
       msg.textContent = "✅ Question submitted successfully!";
       msg.style.color = "green";
