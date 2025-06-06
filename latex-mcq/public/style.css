@@ -1276,3 +1276,49 @@ button[onclick*="reclassify"]:hover {
 .admin-card button[onclick*="batchClassify"]:hover {
   background: #7B1FA2;
 }
+/* Solution preview styles */
+.solution-preview {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 15px;
+  background-color: #f9f9f9;
+  min-height: 60px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+}
+
+.solution-section {
+  margin-top: 15px;
+  padding: 15px;
+  background-color: #e8f5e9;
+  border-radius: 4px;
+  border: 1px solid #4caf50;
+}
+
+.solution-section strong {
+  color: #2e7d32;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.solution-content {
+  line-height: 1.6;
+  color: #333;
+}
+
+/* Styling for LaTeX in solutions */
+.solution-content .MathJax {
+  margin: 10px 0;
+}
+
+/* Textarea for solution */
+#solution {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  resize: vertical;
+  min-height: 150px;
+}

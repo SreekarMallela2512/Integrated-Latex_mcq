@@ -119,6 +119,14 @@
     🔄 Re-classify
   </button>
 </div>
+<!-- Add this after the difficulty field in your form -->
+<label for="solution">Solution (LaTeX):</label>
+<textarea name="solution" id="solution" rows="5" oninput="renderSolutionLatex()" 
+          placeholder="Enter the detailed solution here. You can use LaTeX for mathematical expressions."></textarea>
+<h3>Solution Preview:</h3>
+<div id="solution-preview" class="solution-preview">
+  <em style="color: #777;">Solution preview will appear here...</em>
+</div>
       <!-- PYQ Section -->
       <div class="pyq-section">
         <h3>Previous Year Question (PYQ) Details</h3>
@@ -366,6 +374,46 @@ async function generateUniqueSerialNumber() {
     return `${baseSerial}-${timestamp}`;
   }
 }
+// Function to render solution LaTeX
+function renderSolutionLatex() {
+  clearTimeout(previewTimeout);
+  
+  previewTimeout = setTimeout(() => {
+    const input = document.getElementById('solution').value.trim();
+    const preview = document.getElementById('solution-preview');
+    
+    if (!input) {
+      preview.innerHTML = '<em style="color: #777;">Solution preview will appear here...</em>';
+      return;
+    }
+    
+    // HTML escape and LaTeX processing
+    let escaped = input
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    
+    // Support newlines
+    escaped = escaped.replace(/\n/g, '<br>');
+    
+    // Process LaTeX - display math
+    escaped = escaped.replace(/\$\$([\s\S]+?)\$\$/g, (_, match) => `\$$${match.trim()}\$$`);
+    
+    // Process LaTeX - inline math
+    escaped = escaped.replace(/\$([^\$]+?)\$/g, (_, match) => `\$$${match.trim()}\$$`);
+    
+    preview.innerHTML = escaped;
+    
+    // Render with MathJax
+    if (window.MathJax) {
+      MathJax.typesetClear([preview]);
+      MathJax.typesetPromise([preview]).catch(err => {
+        preview.innerHTML = '<span style="color:red;">LaTeX rendering error.</span>';
+        console.error('MathJax error:', err);
+      });
+    }
+  }, 500);
+}
 
 // Function to update question number field
 async function updateQuestionNumber() {
@@ -440,7 +488,8 @@ async function updateQuestionNumber() {
         document.getElementById('option4').value = question.options[3] || '';
         document.querySelector('input[name="correctOption"]').value = question.correctOption + 1;
         document.getElementById('subject').value = question.subject;
-        
+        document.getElementById('solution').value = question.solution || '';
+        renderSolutionLatex();
         // Update topics based on subject
         updateTopics();
         setTimeout(() => {
@@ -774,6 +823,7 @@ function renderOptionLatex(num) {
   for (let i = 1; i <= 4; i++) {
     document.getElementById(`preview-option${i}`).innerHTML = '';
   }
+  document.getElementById('solution-preview').innerHTML = '<em style="color: #777;">Solution preview will appear here...</em>';
   // Reset difficulty field
   document.getElementById('difficulty').value = '';
   document.getElementById('difficulty').placeholder = 'Will be auto-classified...';
@@ -841,7 +891,8 @@ function renderOptionLatex(num) {
         correctOption: formData.get('correctOption'),
         subject: formData.get('subject'),
         topic: formData.get('topic'),
-        difficulty: formData.get('difficulty').toLowerCase(), // Ensure lowercase
+        difficulty: formData.get('difficulty').toLowerCase(),
+        solution: formData.get('solution') || '', // Ensure lowercase
         pyqType: formData.get('pyqType'),
         shift: formData.get('shift') || 'N/A',
         year: formData.get('year') ? parseInt(formData.get('year')) : null,
@@ -1212,6 +1263,14 @@ function renderOptionLatex(num) {
             <em>Difficulty:</em> ${q.difficulty} ${classificationBadge}
           </div>
           ${pyqInfo}
+           ${q.solution ? `
+    <div class="solution-section">
+      <strong>Solution:</strong>
+      <div class="solution-content" id="solution-${q._id}">
+        ${processSolutionLatex(q.solution)}
+      </div>
+    </div>
+  ` : ''}
           ${creatorInfo}
           ${actionButtons}
           <hr/>
@@ -1336,7 +1395,23 @@ function renderOptionLatex(num) {
         updateMainPyqYearDropdown(defaultYears);
       }
     }
-
+function processSolutionLatex(solution) {
+  if (!solution) return '';
+  
+  let processed = solution
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>');
+  
+  // Process display math
+  processed = processed.replace(/\$\$([\s\S]+?)\$\$/g, (_, match) => `\$$${match.trim()}\$$`);
+  
+  // Process inline math
+  processed = processed.replace(/\$([^\$]+?)\$/g, (_, match) => `\$$${match.trim()}\$$`);
+  
+  return processed;
+}
     // Function to update the main PYQ year dropdown
     function updateMainPyqYearDropdown(yearsData) {
       const mainYearSelect = document.getElementById('year');

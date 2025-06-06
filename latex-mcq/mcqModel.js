@@ -5,7 +5,6 @@ const mcqSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true
-    // Removed unique constraint
   },
   question: String,
   options: [String],
@@ -13,6 +12,10 @@ const mcqSchema = new mongoose.Schema({
   subject: String,
   topic: String,
   difficulty: String,
+  solution: {  // Add this new field
+    type: String,
+    default: ''
+  },
   pyqType: {
     type: String,
     enum: ['JEE MAIN PYQ', 'Not PYQ'],
@@ -25,7 +28,6 @@ const mcqSchema = new mongoose.Schema({
   },
   year: {
     type: Number,
-    
   },
   examDate: {
     type: Date,
@@ -36,11 +38,10 @@ const mcqSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
-  // In mcqModel.js, add this field to the schema
-autoClassified: {
-  type: Boolean,
-  default: false
-},
+  autoClassified: {
+    type: Boolean,
+    default: false
+  },
   createdAt: { type: Date, default: Date.now }
 });
 

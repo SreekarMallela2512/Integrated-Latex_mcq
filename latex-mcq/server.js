@@ -187,7 +187,7 @@ app.get('/auth/status', (req, res) => {
   }
 });
 
-// MCQ submission route
+// MCQ submission route - UPDATED WITH SOLUTION FIELD
 app.post('/submit', requireAuth, async (req, res) => {
   try {
     console.log("=== Submit Request Started ===");
@@ -198,7 +198,8 @@ app.post('/submit', requireAuth, async (req, res) => {
       questionNo, question, options, correctOption,
       subject, topic, difficulty: userDifficulty,
       pyqType, shift, year, examDate,
-      autoClassified
+      autoClassified,
+      solution  // Add this line to destructure solution
     } = req.body;
 
     // Validate required fields
@@ -230,6 +231,7 @@ app.post('/submit', requireAuth, async (req, res) => {
       subject,
       topic,
       difficulty: userDifficulty,
+      solution: solution || '',  // Add this line with default empty string
       pyqType: pyqType || 'Not PYQ',
       createdBy: req.session.userId,
       autoClassified: Boolean(autoClassified)
@@ -270,6 +272,7 @@ app.post('/submit', requireAuth, async (req, res) => {
       
       const savedMcq = await mcq.save();
       console.log("✅ Successfully saved MCQ with ID:", savedMcq._id);
+      console.log("Solution saved:", savedMcq.solution ? "Yes" : "No");  // Add this logging
 
       res.json({ 
         message: "Question added successfully!",
@@ -302,7 +305,8 @@ app.post('/submit', requireAuth, async (req, res) => {
     res.status(500).json({ error: "Error saving question. Please try again." });
   }
 });
-// Get questions based on user role with enhanced filtering and sorting
+
+// Get questions based on user role with enhanced filtering and sorting - UPDATED
 app.get('/questions', requireAuth, async (req, res) => {
   try {
     const { subject, pyqType, year, shift, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
@@ -339,12 +343,11 @@ app.get('/questions', requireAuth, async (req, res) => {
       questions = await MCQ.find(filter)
         .sort(sort)
         .lean();
-    }
-    
-    // Ensure createdAt is included in response
+    }     // Ensure createdAt is included in response and include solution field
     questions = questions.map(q => ({
       ...q,
-      createdAt: q.createdAt || q._id.getTimestamp() // Fallback to ObjectId timestamp if createdAt is missing
+      createdAt: q.createdAt || q._id.getTimestamp(), // Fallback to ObjectId timestamp if createdAt is missing
+      solution: q.solution || '' // Ensure solution field is included
     }));
     
     res.json(questions);
@@ -354,7 +357,7 @@ app.get('/questions', requireAuth, async (req, res) => {
   }
 });
 
-// Get single question by ID (for editing)
+// Get single question by ID (for editing) - UPDATED WITH SOLUTION
 app.get('/questions/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -372,14 +375,34 @@ app.get('/questions/:id', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Question not found or access denied' });
     }
     
-    res.json(question);
+    // Ensure solution is included in the response
+    const questionData = {
+      _id: question._id,
+      questionNo: question.questionNo,
+      question: question.question,
+      options: question.options,
+      correctOption: question.correctOption,
+      subject: question.subject,
+      topic: question.topic,
+      difficulty: question.difficulty,
+      solution: question.solution || '', // Include solution
+      pyqType: question.pyqType,
+      shift: question.shift,
+      year: question.year,
+      examDate: question.examDate,
+      autoClassified: question.autoClassified,
+      createdBy: question.createdBy,
+      createdAt: question.createdAt
+    };
+    
+    res.json(questionData);
   } catch (err) {
     console.error('Error fetching question:', err);
     res.status(500).json({ error: 'Error fetching question' });
   }
 });
 
-// Update question (only own questions for regular users)
+// Update question (only own questions for regular users) - UPDATED WITH SOLUTION
 app.put('/questions/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -388,6 +411,11 @@ app.put('/questions/:id', requireAuth, async (req, res) => {
     // Convert correctOption to 0-based index if it's 1-based
     if (updateData.correctOption && typeof updateData.correctOption === 'string') {
       updateData.correctOption = parseInt(updateData.correctOption) - 1;
+    }
+    
+    // Ensure solution is included in update data
+    if (!updateData.hasOwnProperty('solution')) {
+      updateData.solution = ''; // Default to empty string if not provided
     }
     
     let filter = { _id: id };
@@ -417,7 +445,7 @@ app.put('/questions/:id', requireAuth, async (req, res) => {
   }
 });
 
-// Delete question (only own questions for regular users)
+// Delete question (only own questions for regular users) - NO CHANGES NEEDED
 app.delete('/questions/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -442,7 +470,7 @@ app.delete('/questions/:id', requireAuth, async (req, res) => {
   }
 });
 
-// Get question statistics
+// Get question statistics - UPDATED TO INCLUDE SOLUTION STATS
 app.get('/stats', requireAuth, async (req, res) => {
   try {
     let matchStage = {};
@@ -457,6 +485,11 @@ app.get('/stats', requireAuth, async (req, res) => {
         $group: {
           _id: null,
           totalQuestions: { $sum: 1 },
+          questionsWithSolutions: { 
+            $sum: { 
+              $cond: [{ $and: [{ $ne: ["$solution", ""] }, { $ne: ["$solution", null] }] }, 1, 0] 
+            } 
+          },
           subjectBreakdown: {
             $push: {
               subject: "$subject",
@@ -469,6 +502,13 @@ app.get('/stats', requireAuth, async (req, res) => {
       {
         $project: {
           totalQuestions: 1,
+          questionsWithSolutions: 1,
+          solutionPercentage: {
+            $multiply: [
+              { $divide: ["$questionsWithSolutions", "$totalQuestions"] },
+              100
+            ]
+          },
           subjects: {
             $reduce: {
               input: "$subjectBreakdown",
@@ -524,14 +564,21 @@ app.get('/stats', requireAuth, async (req, res) => {
       }
     ]);
 
-    res.json(stats[0] || { totalQuestions: 0, subjects: {}, pyqTypes: {}, difficulties: {} });
+    res.json(stats[0] || { 
+      totalQuestions: 0, 
+      questionsWithSolutions: 0,
+      solutionPercentage: 0,
+      subjects: {}, 
+      pyqTypes: {}, 
+      difficulties: {} 
+    });
   } catch (err) {
     console.error('Error fetching stats:', err);
     res.status(500).json({ error: "Error fetching statistics." });
   }
 });
 
-// Super user only route to get all users
+// Super user only route to get all users - NO CHANGES NEEDED
 app.get('/users', requireSuperUser, async (req, res) => {
   try {
     const users = await User.find().select('-password');
@@ -542,7 +589,7 @@ app.get('/users', requireSuperUser, async (req, res) => {
   }
 });
 
-// Get unique years from database for filtering
+// Get unique years from database for filtering - NO CHANGES NEEDED
 app.get('/available-years', requireAuth, async (req, res) => {
   try {
     let matchStage = { year: { $exists: true, $ne: null } };
@@ -559,7 +606,7 @@ app.get('/available-years', requireAuth, async (req, res) => {
   }
 });
 
-// Helper function to get hardcoded exam dates
+// Helper function to get hardcoded exam dates - NO CHANGES NEEDED
 function getHardcodedExamDates(year) {
   const examDates = {
     2025: [
@@ -600,7 +647,7 @@ function getHardcodedExamDates(year) {
     ],
     2022: [
       { date: '2022-06-23', label: 'June 23, 2022' },
-           { date: '2022-06-24', label: 'June 24, 2022' },
+      { date: '2022-06-24', label: 'June 24, 2022' },
       { date: '2022-06-25', label: 'June 25, 2022' },
       { date: '2022-06-26', label: 'June 26, 2022' },
       { date: '2022-06-27', label: 'June 27, 2022' },
@@ -616,7 +663,7 @@ function getHardcodedExamDates(year) {
       { date: '2021-02-24', label: 'February 24, 2021' },
       { date: '2021-02-25', label: 'February 25, 2021' },
       { date: '2021-02-26', label: 'February 26, 2021' },
-      { date: '2021-03-16', label: 'March 16, 2021' },
+            { date: '2021-03-16', label: 'March 16, 2021' },
       { date: '2021-03-17', label: 'March 17, 2021' },
       { date: '2021-03-18', label: 'March 18, 2021' },
       { date: '2021-07-20', label: 'July 20, 2021' },
@@ -632,7 +679,7 @@ function getHardcodedExamDates(year) {
   return examDates[year] || [];
 }
 
-// Year Management Routes (Superuser only)
+// Year Management Routes (Superuser only) - NO CHANGES NEEDED
 app.get('/admin/years', requireSuperUser, async (req, res) => {
   try {
     // Get years from Year collection
@@ -652,7 +699,7 @@ app.get('/admin/years', requireSuperUser, async (req, res) => {
   }
 });
 
-// Public route: Get all available years for the frontend dropdown
+// Public route: Get all available years for the frontend dropdown - NO CHANGES NEEDED
 app.get('/api/years', async (req, res) => {
   try {
     // Get years from Year collection
@@ -727,7 +774,7 @@ app.delete('/admin/years/:year', requireSuperUser, async (req, res) => {
   }
 });
 
-// Exam Date Management Routes (Superuser only)
+// Exam Date Management Routes (Superuser only) - NO CHANGES NEEDED
 app.get('/admin/exam-dates/:year', requireSuperUser, async (req, res) => {
   try {
     const { year } = req.params;
@@ -864,6 +911,7 @@ app.delete('/admin/exam-dates', requireSuperUser, async (req, res) => {
     res.status(500).json({ error: 'Error deleting exam date' });
   }
 });
+
 app.get('/test-classifier-manual', async (req, res) => {
   const results = {};
   
@@ -915,7 +963,7 @@ app.get('/test-classifier-manual', async (req, res) => {
   res.json(results);
 });
 
-// Public route: Get all available years (no auth required)
+// Public route: Get all available years (no auth required) - NO CHANGES NEEDED
 app.get('/public/years', async (req, res) => {
   try {
     // Get years from Year collection
@@ -936,7 +984,7 @@ app.get('/public/years', async (req, res) => {
   }
 });
 
-// Public route for exam dates (no auth required)
+// Public route for exam dates (no auth required) - NO CHANGES NEEDED
 app.get('/public/exam-dates/:year', async (req, res) => {
   try {
     const { year } = req.params;
@@ -983,6 +1031,7 @@ app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
   res.status(500).json({ error: 'Internal server error' });
 });
+
 app.post('/api/classify', requireAuth, async (req, res) => {
   try {
     const response = await axios.post(
@@ -995,7 +1044,6 @@ app.post('/api/classify', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Classification failed' });
   }
 });
-// Add this route to your Express server
 // Add this route to count questions with a base serial number
 app.get('/questions/count/:baseSerial', requireAuth, async (req, res) => {
   try {
@@ -1012,6 +1060,7 @@ app.get('/questions/count/:baseSerial', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Failed to count questions' });
   }
 });
+
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server started on port ${PORT}`);
@@ -1025,6 +1074,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('✅ CRUD operations for questions');
   console.log('✅ Admin year and exam date management');
   console.log('✅ Auto-classification integration');
+  console.log('✅ Solution field with LaTeX support'); // Add this line
   
   if (CLASSIFIER_URL) {
     console.log(`🤖 Classifier service URL: ${CLASSIFIER_URL}`);
