@@ -1393,6 +1393,7 @@ button[onclick*="reclassify"]:hover {
   overflow-x: auto;
   max-width: 100%;
   word-wrap: break-word;
+  white-space: pre-wrap; /* Preserve whitespace and line breaks */
 }
 
 /* Responsive handling for mobile */
@@ -1406,6 +1407,7 @@ button[onclick*="reclassify"]:hover {
     padding: 12px;
   }
 }
+
 #solution-preview {
   border: 1px solid #ddd;
   border-radius: 4px;
@@ -1416,6 +1418,7 @@ button[onclick*="reclassify"]:hover {
   overflow-x: auto;
   max-width: 100%;
   word-wrap: break-word;
+  white-space: pre-wrap; /* Preserve whitespace and line breaks */
 }
 
 #solution-preview .MathJax_Display {
@@ -1423,6 +1426,7 @@ button[onclick*="reclassify"]:hover {
   overflow-y: hidden !important;
   max-width: 100% !important;
   margin: 0.5em 0 !important;
+  display: block !important; /* Ensure block display for newlines */
 }
 
 #solution-preview .MathJax {
@@ -1439,6 +1443,7 @@ button[onclick*="reclassify"]:hover {
   background: #a3b1c6;
   border-radius: 3px;
 }
+
 #preview {
   border: 2px dashed #a3b1c6;
   background: #f0f5fc;
@@ -1453,6 +1458,8 @@ button[onclick*="reclassify"]:hover {
   overflow-x: auto;
   max-width: 100%;
   word-wrap: break-word;
+  white-space: pre-wrap; /* Preserve whitespace and line breaks */
+  vertical-align: middle;
 }
 
 #preview .MathJax_Display {
@@ -1461,11 +1468,13 @@ button[onclick*="reclassify"]:hover {
   max-width: 100% !important;
   margin: 0.5em 0 !important;
   font-size: 0.9em !important;
+  display: block !important; /* Ensure block display for newlines */
 }
 
 #preview .MathJax {
   display: inline-block !important;
   max-width: 100% !important;
+  vertical-align: middle;
 }
 
 /* Handle scrollbar for math content */
@@ -1477,13 +1486,21 @@ button[onclick*="reclassify"]:hover {
   background: #a3b1c6;
   border-radius: 3px;
 }
-#preview {
-  /* ... existing styles ... */
-  vertical-align: middle;
+
+/* Additional styles for better LaTeX newline handling */
+.math-container {
+  white-space: pre-wrap;
+  line-height: 1.6;
 }
 
-#preview .MathJax {
-  vertical-align: middle;
+/* Force line breaks for specific LaTeX environments */
+.MathJax_Display[style*="\\\\"] {
+  white-space: pre-wrap !important;
+}
+
+/* Ensure proper spacing between math blocks */
+.MathJax_Display + .MathJax_Display {
+  margin-top: 1em !important;
 }
 /* Question Text with Inline LaTeX */
 .question-text {
