@@ -1165,6 +1165,7 @@ function showSuccess() {
 function displayFilteredQuestions() {
   const list = document.getElementById('questionList');
   if (!list) return;
+  const processedQuestion = processTextForDisplay(q.question);
 
   list.innerHTML = '';
 
@@ -1240,9 +1241,9 @@ function displayFilteredQuestions() {
     div.innerHTML = `
       <div class="question-header">
         <strong>Question No: ${highlightSearchTerm(q.questionNo)}</strong>
-      </div>
-      <strong>Q${i + 1}:</strong> ${processedQuestion}<br/>
-      <ul>${processedOptions}</ul>
+      </div><div class="question-content">
+        <strong>Q${i + 1}:</strong> <span class="question-text-inline">${processedQuestion}</span>
+        <ul>${processedOptions}</ul>
       <div class="question-meta">
         <em>Subject:</em> ${q.subject},
         <em>Topic:</em> ${q.topic},
@@ -1277,44 +1278,44 @@ function displayFilteredQuestions() {
   }
 }
 // Add this helper function to process LaTeX for display
+// Add this helper function to process LaTeX for display
 function processTextForDisplay(text) {
-  if (!text) return '';
-  
-  // HTML escape
-  let processed = text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  
-  // Support newlines in solutions
-  processed = processed.replace(/\n/g, '<br>');
-  
-  // Process display math - matching your existing pattern
-  processed = processed.replace(/\$\$([\s\S]+?)\$\$/g, (_, match) => `\$$${match.trim()}\$$`);
-  
-  // Process inline math - matching your existing pattern
-  processed = processed.replace(/\$([^\$]+?)\$/g, (_, match) => `\$$${match.trim()}\$$`);
-  
-  // Apply search highlighting if needed
-  if (currentSearchTerm) {
-    const escapedTerm = currentSearchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`(${escapedTerm})`, 'gi');
-    // Only highlight outside of LaTeX delimiters
-    processed = processed.replace(regex, (match, p1, offset, string) => {
-      // Check if we're inside LaTeX delimiters
-      const beforeMatch = string.substring(0, offset);
-      const dollarSignsBefore = (beforeMatch.match(/\$\$/g) || []).length;
-      if (dollarSignsBefore % 2 === 1) {
-        // We're inside LaTeX, don't highlight
-        return match;
-      }
-      return '<span class="search-highlight">' + match + '</span>';
+    if (!text) return '';
+    
+    // HTML escape
+    let processed = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    
+    // Support newlines in solutions
+    processed = processed.replace(/\n/g, '<br>');
+    
+    // Process display math - convert to inline for question display
+    processed = processed.replace(/\$\$([\s\S]+?)\$\$/g, (_, match) => {
+        // Use single $ for inline rendering in question list
+        return `$${match.trim()}$`;
     });
-  }
-  
-  return processed;
-}
-    // Highlight search terms in text
+    
+    // Process inline math
+    processed = processed.replace(/\$([^\$]+?)\$/g, (_, match) => `\$$${match.trim()}\$$`);
+    
+    // Apply search highlighting if needed
+    if (currentSearchTerm) {
+        const escapedTerm = currentSearchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(${escapedTerm})`, 'gi');
+        processed = processed.replace(regex, (match, p1, offset, string) => {
+            const beforeMatch = string.substring(0, offset);
+            const dollarSignsBefore = (beforeMatch.match(/\$/g) || []).length;
+            if (dollarSignsBefore % 2 === 1) {
+                return match;
+            }
+            return '<span class="search-highlight">' + match + '</span>';
+        });
+    }
+    
+    return processed;
+}    // Highlight search terms in text
     function highlightSearchTerm(text) {
       if (!currentSearchTerm || !text) return text;
       

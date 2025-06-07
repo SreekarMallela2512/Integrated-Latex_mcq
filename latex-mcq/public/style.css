@@ -1649,3 +1649,70 @@ button[onclick*="reclassify"]:hover {
     font-size: 12px;
   }
 }
+/* Fix for inline LaTeX rendering in question cards */
+.question-text-inline {
+    display: inline;
+}
+
+.question-text-inline .MathJax,
+.question-text-inline .MathJax_Display,
+.question-text-inline .MathJax_Preview {
+    display: inline !important;
+    margin: 0 0.2em !important;
+    text-align: left !important;
+}
+
+/* Override MathJax default centering */
+.question-card .MathJax_Display {
+    display: inline !important;
+    text-align: left !important;
+    margin: 0 0.3em !important;
+    width: auto !important;
+}
+
+/* Ensure equations flow with text */
+.question-card .MathJax {
+    display: inline !important;
+    position: relative !important;
+    text-indent: 0 !important;
+    margin: 0 0.2em !important;
+}
+
+/* Fix for equation containers */
+.question-card .MJXc-display {
+    display: inline !important;
+    text-align: left !important;
+    margin: 0 !important;
+    width: auto !important;
+}
+
+/* Ensure proper vertical alignment */
+.question-card .MathJax,
+.question-card .MathJax_Display {
+    vertical-align: middle !important;
+}
+
+/* Question content wrapper */
+.question-content {
+    line-height: 1.8;
+    word-wrap: break-word;
+}
+
+/* Fix overflow for long equations */
+.question-card {
+    overflow-x: auto;
+}
+
+/* Options with proper LaTeX alignment */
+.question-card ul li {
+    display: flex;
+    align-items: center;
+    text-align: left;
+}
+
+.question-card ul li .MathJax,
+.question-card ul li .MathJax_Display {
+    display: inline !important;
+    margin: 0 0.2em !important;
+    text-align: left !important;
+}
