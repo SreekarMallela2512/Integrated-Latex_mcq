@@ -924,6 +924,24 @@ function initializeFilters() {
   // Load years for filter
   loadFilterYears();
 }
+function loadCreators() {
+  const creators = [...new Set(allQuestions
+    .filter(q => q.createdBy && q.createdBy.username)
+    .map(q => q.createdBy.username))]
+    .sort();
+  
+  const creatorSelect = document.getElementById('filterCreator');
+  if (creatorSelect) {
+    creatorSelect.innerHTML = '<option value="">All Users</option>';
+    
+    creators.forEach(creator => {
+      const option = document.createElement('option');
+      option.value = creator;
+      option.textContent = creator;
+      creatorSelect.appendChild(option);
+    });
+  }
+}
 
     // New loadQuestions function that integrates with search/filter
     // New loadQuestions function that integrates with search/filter
