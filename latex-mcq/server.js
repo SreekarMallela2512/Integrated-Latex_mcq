@@ -281,23 +281,25 @@ app.post('/submit', requireAuth, async (req, res) => {
         wasAutoClassified: mcqData.autoClassified
       });
 
-    } catch (mongoError) {
-      console.error("❌ MongoDB Save Error:");
-      console.error("Error name:", mongoError.name);
-      console.error("Error message:", mongoError.message);
-      console.error("Validation errors:", mongoError.errors);
-      console.error("Full error:", mongoError);
-      
-      // Send more specific error message
+    }  catch (mongoError) {
+      console.error("❌ MongoDB Save Error:", mongoError);
+
+      // Handle duplicate question number
+      if (mongoError.code === 11000 && mongoError.keyPattern?.questionNo) {
+        return res.status(400).json({ error: 'Duplicate Question Number. Please refresh and try again.' });
+      }
+
+      // Handle validation error
       if (mongoError.name === 'ValidationError') {
         const errors = Object.keys(mongoError.errors).map(key => 
           `${key}: ${mongoError.errors[key].message}`
         ).join(', ');
         return res.status(400).json({ error: `Validation failed: ${errors}` });
       }
-      
-      throw mongoError; // Re-throw to be caught by outer catch
+
+      throw mongoError; // rethrow if not handled
     }
+
 
   } catch (err) {
     console.error('❌ Submit endpoint error:', err);
@@ -1006,6 +1008,19 @@ app.get('/public/exam-dates/:year', async (req, res) => {
         label: d.label
       });
     });
+    // Count how many questions already exist with the given serial number prefix
+app.get('/questions/count/:prefix', requireAuth, async (req, res) => {
+  const { prefix } = req.params;
+  try {
+    const regex = new RegExp(`^${prefix}`);
+    const count = await MCQ.countDocuments({ questionNo: { $regex: regex } });
+    res.json({ count });
+  } catch (err) {
+    console.error('Error counting questions:', err);
+    res.status(500).json({ error: 'Error counting questions' });
+  }
+});
+
     
     // Add stored dates
     storedDates.forEach(d => {

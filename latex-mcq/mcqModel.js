@@ -4,7 +4,8 @@ const mcqSchema = new mongoose.Schema({
   questionNo: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
+    unique: true //
   },
   question: String,
   options: [String],
