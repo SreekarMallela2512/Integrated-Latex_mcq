@@ -1485,3 +1485,150 @@ button[onclick*="reclassify"]:hover {
 #preview .MathJax {
   vertical-align: middle;
 }
+/* Question Text with Inline LaTeX */
+.question-text {
+  font-size: 16px;
+  color: #34495e;
+  line-height: 1.6;
+  margin-bottom: 15px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Inline LaTeX in question text */
+.question-text .katex,
+.question-text .MathJax,
+.question-text .math-inline {
+  display: inline !important;
+  margin: 0 2px !important;
+  padding: 0 !important;
+  vertical-align: baseline !important;
+  line-height: inherit !important;
+  font-size: inherit !important;
+}
+
+/* Block equations should be inline in question text */
+.question-text .katex-display,
+.question-text .MathJax_Display {
+  display: inline !important;
+  margin: 0 4px !important;
+  text-align: left !important;
+}
+
+/* Options with LaTeX alignment */
+.question-card ul {
+  list-style: none;
+  padding: 0;
+  margin: 15px 0;
+}
+
+.question-card ul li {
+  background: #f8f9fa;
+  margin: 8px 0;
+  padding: 12px 15px;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+  transition: all 0.3s ease;
+  position: relative;
+  padding-left: 40px;
+  color: #34495e;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  text-align: left;
+}
+
+/* LaTeX in options - left aligned */
+.question-card ul li .katex,
+.question-card ul li .MathJax,
+.question-card ul li .math-inline {
+  display: inline !important;
+  margin: 0 2px !important;
+  padding: 0 !important;
+  vertical-align: baseline !important;
+  text-align: left !important;
+  line-height: inherit !important;
+}
+
+/* Block equations in options should be inline and left-aligned */
+.question-card ul li .katex-display,
+.question-card ul li .MathJax_Display {
+  display: inline !important;
+  margin: 0 4px !important;
+  text-align: left !important;
+}
+
+/* Option letters */
+.question-card ul li::before {
+  content: attr(data-option);
+  position: absolute;
+  left: 12px;
+  top: 12px; /* Fixed position instead of center */
+  width: 24px;
+  height: 24px;
+  background: #5dade2;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+/* General LaTeX styling overrides */
+.katex {
+  font-size: inherit !important;
+}
+
+.katex-display {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.MathJax {
+  font-size: inherit !important;
+}
+
+.MathJax_Display {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Ensure text and math flow together */
+.question-text > *,
+.question-card ul li > * {
+  display: inline;
+  vertical-align: baseline;
+}
+
+/* Fix for specific LaTeX environments that might break layout */
+.katex .base,
+.katex .strut {
+  display: inline !important;
+}
+
+/* Responsive adjustments for mobile */
+@media (max-width: 768px) {
+  .question-text {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  
+  .question-card ul li {
+    padding: 10px 12px;
+    padding-left: 36px;
+    font-size: 14px;
+  }
+  
+  .question-card ul li::before {
+    left: 8px;
+    top: 10px;
+    width: 22px;
+    height: 22px;
+    font-size: 12px;
+  }
+}
