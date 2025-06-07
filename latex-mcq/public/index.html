@@ -909,6 +909,21 @@ function showSuccess() {
       }
       wasAutoClassified = false;
     });
+function initializeFilters() {
+  console.log('Initializing filters...');
+  
+  // Show creator filter for superusers
+  if (currentUser && currentUser.role === 'superuser') {
+    const creatorFilterGroup = document.getElementById('creatorFilterGroup');
+    if (creatorFilterGroup) {
+      creatorFilterGroup.style.display = 'block';
+    }
+    loadCreators();
+  }
+  
+  // Load years for filter
+  loadFilterYears();
+}
 
     // New loadQuestions function that integrates with search/filter
     // New loadQuestions function that integrates with search/filter
