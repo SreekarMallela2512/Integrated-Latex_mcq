@@ -296,6 +296,10 @@
     let editMode = false;
     let editingQuestionId = null;
     let wasAutoClassified = false;
+    // Add this at the very top with other variables
+let previewTimeout;
+    // Add this at the very top with other variables
+
     
     // Global variables for search and filter
     let allQuestions = [];
@@ -316,7 +320,7 @@
     // Topic arrays
     const physicsTopics = ["Physical World and Measurement", "Kinematics", "Laws of Motion", "Work, Energy and Power", "Rotational Motion", "Gravitation", "Properties of Solids and Liquids", "Thermodynamics", "Kinetic Theory of Gases", "Oscillations and Waves", "Electrostatics", "Current Electricity", "Magnetic Effects of Current and Magnetism", "Electromagnetic Induction and Alternating Currents", "Electromagnetic Waves", "Optics", "Dual Nature of Matter and Radiation", "Atoms and Nuclei", "Electronic Devices", "Communication Systems"];
 
-    const chemistryTopics = ["Some Basic Concepts of Chemistry (Mole Concept)", "Atomic Structure", "Chemical Bonding and Molecular Structure", "Chemical Thermodynamics", "Solutions", "Equilibrium", "Redox Reactions and Electrochemistry", "Chemical Kinetics", "Surface Chemistry", "Classification of Elements and Periodicity in Properties", "General Principles and Processes of Isolation of Metals", "Hydrogen", "S-block elements (Alkali and Alkaline earth metals)", "P-block elements", "D and F block elements", "Coordination Compounds", "Environmental Chemistry", "Organic Chemistry – Basic Principles and Techniques", "Hydrocarbons", "Haloalkanes and Haloarenes", "Alcohols, Phenols, and Ethers", "Aldehydes, Ketones, and Carboxylic Acids", "Organic Compounds Containing Nitrogen", "Polymers", "Biomolecules"];
+    const chemistryTopics = ["Some Basic Concepts of Chemistry (Mole Concept)", "Atomic Structure", "Chemical Bonding and Molecular Structure", "Chemical Thermodynamics", "Solutions", "Equilibrium", "Redox Reactions and Electrochemistry", "Chemical Kinetics", "Surface Chemistry", "Classification of Elements and Periodicity in Properties", "General Principles and Processes of Isolation of Metals", "Hydrogen", "S-block elements (Alkali and Alkaline earth metals)", "P-block elements", "D and F block elements", "Coordination Compounds", "Environmental Chemistry", "Organic Chemistry – Basic Principles and Techniques", "Hydrocarbons", "Haloalkanes and Haloarenes", "Alcohols, Phenols, and Ethers", "Aldehydes, Ketones, and Carboxylic Acids", "Organic Compounds Containing Nitrogen", "Polymers", "Biomolecules", "Solid States"];
 
     const mathsTopics = ["Sets, Relations and Functions", "Complex Numbers and Quadratic Equations", "Matrices and Determinants", "Permutations and Combinations", "Mathematical Induction", "Binomial Theorem", "Sequences and Series", "Limits, Continuity and Differentiability", "Integral Calculus", "Differential Equations", "Coordinate Geometry", "3D Geometry", "Vector Algebra", "Statistics and Probability", "Trigonometry", "Mathematical Reasoning"];
     // Add these variables at the top with other global variables
@@ -659,7 +663,7 @@ async function updateQuestionNumber() {
       }
     });
 
-    let previewTimeout;
+    
 
  function renderLatex() {
   clearTimeout(previewTimeout);
@@ -772,18 +776,6 @@ function renderOptionLatex(num) {
 }
 
 // Unified LaTeX processing function
-function processLatexContent(input) {
-  // First, escape HTML to prevent XSS
-  let escaped = input.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  
-  // Handle various LaTeX formats
-  escaped = escaped.replace(/\$\$([\s\S]+?)\$\$/g, (_, match) => `\$$${match.trim()}\$$`);
-  escaped = escaped.replace(/\\$$(.+?)\\$$/gs, (_, match) => `\$$${match.trim()}\$$`);
-  escaped = escaped.replace(/(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)/gs, (_, match) => `\$$${match.trim()}\$$`);
-  escaped = escaped.replace(/\\$$(.+?)\\$$/gs, (_, match) => `\$$${match.trim()}\$$`);
-  
-  return escaped;
-} 
 function showSuccess() {
       const msg = document.getElementById("successMessage");
       msg.textContent = "✅ Question submitted successfully!";
@@ -919,82 +911,66 @@ function showSuccess() {
     });
 
     // New loadQuestions function that integrates with search/filter
-    async function loadQuestions() {
-      try {
-        const response = await fetch('/questions');
-        
-        if (response.status === 401) {
-          window.location.href = '/login.html';
-          return;
-        }
-        
-        allQuestions = await response.json();
-        
-        // Show search and filter container
-        const searchFilterContainer = document.getElementById('searchFilterContainer');
-        if (searchFilterContainer) {
-          searchFilterContainer.style.display = 'flex';
-        }
-        
-        if (allQuestions.length === 0) {
-          document.getElementById('questionList').innerHTML = '<p>No questions found.</p>';
-          const resultsSummary = document.getElementById('resultsSummary');
-          if (resultsSummary) {
-            resultsSummary.style.display = 'none';
-          }
-          return;
-        }
-
-        // Initialize filters on first load
-        initializeFilters();
-        
-        // Display all questions initially
-        filteredQuestions = [...allQuestions];
-        displayFilteredQuestions();
-        updateResultsSummary();
-        
-      } catch (error) {
-        console.error('Error loading questions:', error);
-        alert('Error loading questions. Please try again.');
+    // New loadQuestions function that integrates with search/filter
+async function loadQuestions() {
+  try {
+    console.log('Starting to load questions...');
+    const response = await fetch('/questions');
+    
+    console.log('Response status:', response.status);
+    
+    if (response.status === 401) {
+      window.location.href = '/login.html';
+      return;
+    }
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('Questions loaded:', data);
+    
+    allQuestions = data;
+    
+    // Show search and filter container
+    const searchFilterContainer = document.getElementById('searchFilterContainer');
+    if (searchFilterContainer) {
+      searchFilterContainer.style.display = 'flex';
+    }
+    
+    if (allQuestions.length === 0) {
+      document.getElementById('questionList').innerHTML = '<p>No questions found.</p>';
+      const resultsSummary = document.getElementById('resultsSummary');
+      if (resultsSummary) {
+        resultsSummary.style.display = 'none';
       }
+      return;
     }
 
-    // Initialize filters
-    function initializeFilters() {
-      // Show creator filter for superusers
-      if (currentUser && currentUser.role === 'superuser') {
-        const creatorFilterGroup = document.getElementById('creatorFilterGroup');
-        if (creatorFilterGroup) {
-          creatorFilterGroup.style.display = 'block';
-        }
-        loadCreators();
-      }
-      
-      // Load years for filter
-      loadFilterYears();
+    // Initialize filters on first load
+    initializeFilters();
+    
+    // Display all questions initially
+    filteredQuestions = [...allQuestions];
+    displayFilteredQuestions();
+    updateResultsSummary();
+    
+  } catch (error) {
+    console.error('Detailed error loading questions:', error);
+    console.error('Error stack:', error.stack);
+    
+    // More specific error message
+    const errorMessage = error.message || 'Unknown error occurred';
+    alert(`Error loading questions: ${errorMessage}. Please check the console for details.`);
+    
+    // Still try to show the question list container
+    const questionList = document.getElementById('questionList');
+    if (questionList) {
+      questionList.innerHTML = `<p style="color: red;">Error loading questions: ${errorMessage}</p>`;
     }
-
-    // Load unique creators for filter (superuser only)
-       // Load unique creators for filter (superuser only)
-    function loadCreators() {
-      const creators = [...new Set(allQuestions
-        .filter(q => q.createdBy && q.createdBy.username)
-        .map(q => q.createdBy.username))]
-        .sort();
-      
-      const creatorSelect = document.getElementById('filterCreator');
-      if (creatorSelect) {
-        creatorSelect.innerHTML = '<option value="">All Users</option>';
-        
-        creators.forEach(creator => {
-          const option = document.createElement('option');
-          option.value = creator;
-          option.textContent = creator;
-          creatorSelect.appendChild(option);
-        });
-      }
-    }
-
+  }
+}
     // Load years for filter dropdown
     function loadFilterYears() {
       const years = [...new Set(allQuestions
@@ -1159,6 +1135,15 @@ function showSuccess() {
       updateFilterCount();
       updateResultsSummary();
     }
+    // Highlight search terms in text
+function highlightSearchTerm(text) {
+  if (!currentSearchTerm || !text) return text;
+  
+  // Escape special regex characters
+  const escapedTerm = currentSearchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escapedTerm})`, 'gi');
+  return text.replace(regex, '<span class="search-highlight">$1</span>');
+}
 
     // Display filtered questions
     // Display filtered questions
