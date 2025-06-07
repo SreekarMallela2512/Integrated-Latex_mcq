@@ -325,53 +325,24 @@ let questionCountCache = {};
 // Function to generate unique serial number
 async function generateUniqueSerialNumber() {
   const pyqType = document.getElementById('pyqType').value;
-  
-  // Only generate for PYQ questions
-  if (pyqType !== 'JEE MAIN PYQ') {
-    return null;
-  }
-  
+  if (pyqType !== 'JEE MAIN PYQ') return null;
+
   const year = document.getElementById('year').value;
   const examDate = document.getElementById('examDate').value;
   const shiftRadio = document.querySelector('input[name="shift"]:checked');
-  
-  if (!year || !examDate || !shiftRadio) {
-    return null;
-  }
-  
+  if (!year || !examDate || !shiftRadio) return null;
+
   const shift = shiftRadio.value;
-  
-  // Format the date (MMDD)
-  const dateObj = new Date(examDate);
-  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-  const day = String(dateObj.getDate()).padStart(2, '0');
-  const dateStr = `${month}${day}`;
-  
-  // Format shift (S1 or S2)
-  const shiftCode = shift === 'Shift 1' ? 'S1' : 'S2';
-  
-  // Create base serial format: YYYY-MMDD-SX
-  const baseSerial = `${year}-${dateStr}-${shiftCode}`;
-  
+
   try {
-    // Get count of existing questions with this base serial
-    const response = await fetch(`/questions/count/${encodeURIComponent(baseSerial)}`);
-    let count = 1;
-    
-    if (response.ok) {
-      const data = await response.json();
-      count = (data.count || 0) + 1;
-    }
-    
-    // Generate the full serial number: YYYY-MMDD-SX-XXX
-    const serialNumber = `${baseSerial}-${String(count).padStart(3, '0')}`;
-    
-    return serialNumber;
+    const response = await fetch(`/generate-serial/${year}/${examDate}/${shift}`);
+    if (!response.ok) throw new Error('Failed to generate serial');
+
+    const { serial } = await response.json();
+    return serial;
   } catch (error) {
-    console.error('Error generating serial number:', error);
-    // Fallback serial number
-    const timestamp = Date.now().toString().slice(-4);
-    return `${baseSerial}-${timestamp}`;
+    console.error('Serial generation error:', error);
+    return `FALLBACK-${Date.now()}`; // fallback in extreme case
   }
 }
 // Function to render solution LaTeX

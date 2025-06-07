@@ -193,22 +193,29 @@ app.post('/submit', requireAuth, async (req, res) => {
     console.log("=== Submit Request Started ===");
     console.log("User ID:", req.session.userId);
     console.log("Request body:", JSON.stringify(req.body, null, 2));
-    
-    const { 
+
+    const {
       questionNo, question, options, correctOption,
       subject, topic, difficulty: userDifficulty,
       pyqType, shift, year, examDate,
       autoClassified,
-      solution  // Add this line to destructure solution
+      solution
     } = req.body;
 
-    // Validate required fields
-    if (!question || !options || options.length !== 4) {
+    // Trim question to remove accidental space differences
+    const trimmedQuestion = question.trim();
+
+    // 🔍 Check for duplicate question
+    const duplicateQuestion = await MCQ.findOne({ question: trimmedQuestion });
+    if (duplicateQuestion) {
+      return res.status(400).json({ error: 'This question already exists in the database.' });
+    }
+
+    if (!trimmedQuestion || !options || options.length !== 4) {
       console.error("Validation failed: Missing question or options");
       return res.status(400).json({ error: 'Question and 4 options are required' });
     }
 
-    // Validate PYQ fields if needed
     if (pyqType === 'JEE MAIN PYQ') {
       if (!shift || !year) {
         return res.status(400).json({ error: 'Shift and Year are required for JEE MAIN PYQ questions' });
@@ -222,16 +229,15 @@ app.post('/submit', requireAuth, async (req, res) => {
     const correctOptionIndex = parseInt(correctOption, 10) - 1;
     console.log("Correct option index:", correctOptionIndex);
 
-    // Build initial mcqData
     const mcqData = {
       questionNo,
-      question,
+      question: trimmedQuestion,
       options,
       correctOption: correctOptionIndex,
       subject,
       topic,
       difficulty: userDifficulty,
-      solution: solution || '',  // Add this line with default empty string
+      solution: solution || '',
       pyqType: pyqType || 'Not PYQ',
       createdBy: req.session.userId,
       autoClassified: Boolean(autoClassified)
@@ -239,72 +245,104 @@ app.post('/submit', requireAuth, async (req, res) => {
 
     console.log("Initial MCQ data:", JSON.stringify(mcqData, null, 2));
 
-    // Add PYQ-specific fields
     if (pyqType === 'JEE MAIN PYQ') {
       mcqData.shift = shift;
       mcqData.year = parseInt(year, 10);
       if (examDate) mcqData.examDate = new Date(examDate);
     }
 
-    // Auto-classification step
     if (mcqData.autoClassified && CLASSIFIER_URL) {
       try {
         console.log("Starting auto-classification...");
         const resp = await axios.post(
           `${CLASSIFIER_URL}/classify`,
-          { session_id: req.sessionID, question },
+          { session_id: req.sessionID, question: trimmedQuestion },
           { timeout: 45000 }
         );
         mcqData.difficulty = resp.data.difficulty;
         console.log("✅ Auto-classified as:", mcqData.difficulty);
       } catch (err) {
         console.error("⚠️ Auto-classify failed:", err.message);
-        // Keep user-provided difficulty
       }
     }
 
     console.log("Final MCQ data before save:", JSON.stringify(mcqData, null, 2));
 
-    // Persist to MongoDB
     try {
       const mcq = new MCQ(mcqData);
-      console.log("Created MCQ instance");
-      
       const savedMcq = await mcq.save();
       console.log("✅ Successfully saved MCQ with ID:", savedMcq._id);
-      console.log("Solution saved:", savedMcq.solution ? "Yes" : "No");  // Add this logging
 
-      res.json({ 
+      res.json({
         message: "Question added successfully!",
         questionId: savedMcq._id,
         difficulty: mcqData.difficulty,
         wasAutoClassified: mcqData.autoClassified
       });
 
-    }  catch (mongoError) {
+    } catch (mongoError) {
       console.error("❌ MongoDB Save Error:", mongoError);
 
-      // Handle duplicate question number
       if (mongoError.code === 11000 && mongoError.keyPattern?.questionNo) {
         return res.status(400).json({ error: 'Duplicate Question Number. Please refresh and try again.' });
       }
 
-      // Handle validation error
       if (mongoError.name === 'ValidationError') {
-        const errors = Object.keys(mongoError.errors).map(key => 
+        const errors = Object.keys(mongoError.errors).map(key =>
           `${key}: ${mongoError.errors[key].message}`
         ).join(', ');
         return res.status(400).json({ error: `Validation failed: ${errors}` });
       }
 
-      throw mongoError; // rethrow if not handled
+      throw mongoError;
     }
-
 
   } catch (err) {
     console.error('❌ Submit endpoint error:', err);
-    console.error('Stack trace:', err.stack);
     res.status(500).json({ error: "Error saving question. Please try again." });
+  }
+});
+
+app.get('/generate-serial/:year/:date/:shift', requireAuth, async (req, res) => {
+  const { year, date, shift } = req.params;
+
+  if (!year || !date || !shift) {
+    return res.status(400).json({ error: 'Missing parameters' });
+  }
+
+  const dateObj = new Date(date);
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  const dateStr = `${month}${day}`;
+  const shiftCode = shift === 'Shift 1' ? 'S1' : 'S2';
+
+  const baseSerial = `${year}-${dateStr}-${shiftCode}`;
+
+  try {
+    const regex = new RegExp(`^${baseSerial}-\\d{3}$`);
+    const existing = await MCQ.find({ questionNo: { $regex: regex } }).select('questionNo');
+
+    // Extract used numbers
+    const usedNumbers = new Set();
+    existing.forEach(q => {
+      const parts = q.questionNo.split('-');
+      const last = parts[parts.length - 1];
+      if (/^\d+$/.test(last)) {
+        usedNumbers.add(parseInt(last));
+      }
+    });
+
+    // Find first unused number
+    let nextNum = 1;
+    while (usedNumbers.has(nextNum)) {
+      nextNum++;
+    }
+
+    const serial = `${baseSerial}-${String(nextNum).padStart(3, '0')}`;
+    return res.json({ serial });
+  } catch (err) {
+    console.error('Serial generation error:', err);
+    res.status(500).json({ error: 'Failed to generate serial' });
   }
 });
 
