@@ -1162,121 +1162,130 @@ function showSuccess() {
 
     // Display filtered questions
     // Display filtered questions
+// Display filtered questions
 function displayFilteredQuestions() {
-  const list = document.getElementById('questionList');
-  if (!list) return;
-  const processedQuestion = processTextForDisplay(q.question);
+    const list = document.getElementById('questionList');
+    if (!list) return;
 
-  list.innerHTML = '';
+    list.innerHTML = '';
 
-  if (filteredQuestions.length === 0) {
-    list.innerHTML = '<p>No questions match your search/filters.</p>';
-    return;
-  }
-
-  filteredQuestions.forEach((q, i) => {
-    const div = document.createElement('div');
-    div.className = 'question-card';
-
-    let creatorInfo = '';
-    if (currentUser.role === 'superuser' && q.createdBy) {
-      const createdDate = new Date(q.createdAt);
-      const formattedDateTime = createdDate.toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-      });
-
-      creatorInfo = `
-        <div class="creator-info">
-          <div><strong>Created by:</strong> ${q.createdBy.username || 'Unknown'}</div>
-          <div><strong>Created on:</strong> ${formattedDateTime}</div>
-        </div>
-      `;
+    if (filteredQuestions.length === 0) {
+        list.innerHTML = '<p>No questions match your search/filters.</p>';
+        return;
     }
 
-    let pyqInfo = '';
-    if (q.pyqType && q.pyqType !== 'Not PYQ') {
-      pyqInfo = `<div class="pyq-info">
-        <strong>PYQ:</strong> ${q.pyqType}
-        ${q.examDate ? ` - ${new Date(q.examDate).toLocaleDateString('en-US', { 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric' 
-        })}` : ''}
-        ${q.shift && q.shift !== 'N/A' ? ` - ${q.shift}` : ''}
-      </div>`;
-    }
+    filteredQuestions.forEach((q, i) => {
+        const div = document.createElement('div');
+        div.className = 'question-card';
 
-    let actionButtons = '';
-    if (currentUser.role === 'superuser') {
-      actionButtons = `
-        <div class="action-buttons">
-          <button onclick="editQuestion('${q._id}')" class="edit-btn">✏️ Edit</button>
-          <button onclick="deleteQuestion('${q._id}')" class="delete-btn">🗑️ Delete</button>
-        </div>
-      `;
-    }
+        let creatorInfo = '';
+        if (currentUser.role === 'superuser' && q.createdBy) {
+            const createdDate = new Date(q.createdAt);
+            const formattedDateTime = createdDate.toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            });
+            creatorInfo = `
+                <div class="creator-info">
+                    <div><strong>Created by:</strong> ${q.createdBy.username || 'Unknown'}</div>
+                    <div><strong>Created on:</strong> ${formattedDateTime}</div>
+                </div>
+            `;
+        }
 
-    const classificationBadge = q.autoClassified ? 
-      '<span class="badge auto-classified">🤖 Auto-classified</span>' : '';
+        let pyqInfo = '';
+        if (q.pyqType && q.pyqType !== 'Not PYQ') {
+            pyqInfo = `<div class="pyq-info">
+                <strong>PYQ:</strong> ${q.pyqType}
+                ${q.examDate ? ` - ${new Date(q.examDate).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                })}` : ''}
+                ${q.shift && q.shift !== 'N/A' ? ` - ${q.shift}` : ''}
+            </div>`;
+        }
 
-    // Process question text with LaTeX
-    const processedQuestion = processTextForDisplay(q.question);
-    
-    // Process options with LaTeX
-    const processedOptions = q.options.map((opt, idx) => {
-      const processedOpt = processTextForDisplay(opt);
-      const isCorrect = idx === q.correctOption;
-      return `<li${isCorrect ? ' style="font-weight:bold;color:green;"' : ''}>${String.fromCharCode(65 + idx)}. ${processedOpt}</li>`;
-    }).join('');
+        let actionButtons = '';
+        if (currentUser.role === 'superuser') {
+            actionButtons = `
+                <div class="action-buttons">
+                    <button onclick="editQuestion('${q._id}')" class="edit-btn">✏️ Edit</button>
+                    <button onclick="deleteQuestion('${q._id}')" class="delete-btn">🗑️ Delete</button>
+                </div>
+            `;
+        }
 
-    // Process solution if exists
-    const processedSolution = q.solution ? processTextForDisplay(q.solution) : '';
+        const classificationBadge = q.autoClassified ? 
+            '<span class="badge auto-classified">🤖 Auto-classified</span>' : '';
 
-    div.innerHTML = `
-      <div class="question-header">
-        <strong>Question No: ${highlightSearchTerm(q.questionNo)}</strong>
-      </div><div class="question-content">
-        <strong>Q${i + 1}:</strong> <span class="question-text-inline">${processedQuestion}</span>
-        <ul>${processedOptions}</ul>
-      <div class="question-meta">
-        <em>Subject:</em> ${q.subject},
-        <em>Topic:</em> ${q.topic},
-        <em>Difficulty:</em> ${q.difficulty}
-        ${classificationBadge}
-      </div>
-      ${pyqInfo}
-      ${q.solution ? `
-        <div class="solution-section">
-          <strong>Solution:</strong>
-          <div class="solution-content">
-            ${processedSolution}
-          </div>
-        </div>
-      ` : ''}
-      ${creatorInfo}
-      ${actionButtons}
-      <hr/>
-    `;
+        // Process question text with LaTeX
+        const processedQuestion = processTextForDisplay(q.question);
 
-    list.appendChild(div);
-  });
+        // Process options with LaTeX
+        const processedOptions = q.options.map((opt, idx) => {
+            const processedOpt = processTextForDisplay(opt);
+            const isCorrect = idx === q.correctOption;
+            const optionLetter = String.fromCharCode(65 + idx);
+            return `<li data-option="${optionLetter}"${isCorrect ? ' style="font-weight:bold;color:green;"' : ''}>${processedOpt}</li>`;
+        }).join('');
 
-  // Render MathJax for all questions
-  if (window.MathJax) {
-    MathJax.typesetClear([list]);
-    MathJax.typesetPromise([list]).then(() => {
-      console.log('MathJax rendering complete for question list');
-    }).catch((err) => {
-      console.error('MathJax rendering error:', err);
+        // Process solution if exists
+        const processedSolution = q.solution ? processTextForDisplay(q.solution) : '';
+
+        div.innerHTML = `
+            <div class="question-header">
+                <strong>Question No: ${highlightSearchTerm(q.questionNo)}</strong>
+            </div>
+            <div class="question-content">
+                <strong>Q${i + 1}:</strong> <span class="question-text-inline">${processedQuestion}</span>
+                <ul>${processedOptions}</ul>
+                <div class="question-meta">
+                    <em>Subject:</em> ${q.subject}, 
+                    <em>Topic:</em> ${q.topic}, 
+                    <em>Difficulty:</em> ${q.difficulty}
+                    ${classificationBadge}
+                </div>
+                ${pyqInfo}
+                ${q.solution ? `
+                    <div class="solution-section">
+                        <strong>Solution:</strong>
+                        <div class="solution-content">
+                            ${processedSolution}
+                        </div>
+                    </div>
+                ` : ''}
+                ${creatorInfo}
+            </div>
+            ${actionButtons}
+        `;
+
+        list.appendChild(div);
     });
-  }
-}
+
+    // Render MathJax for all questions
+    if (window.MathJax) {
+        MathJax.typesetClear([list]);
+        MathJax.typesetPromise([list]).then(() => {
+            console.log('MathJax rendering complete for question list');
+            
+            // Force inline display for equations
+            document.querySelectorAll('.question-card .MathJax_Display').forEach(el => {
+                el.style.display = 'inline';
+                el.style.textAlign = 'left';
+                el.style.margin = '0 0.3em';
+                el.style.width = 'auto';
+            });
+        }).catch((err) => {
+            console.error('MathJax rendering error:', err);
+        });
+    }
+}// Add this helper function to process LaTeX for display
 // Add this helper function to process LaTeX for display
 // Add this helper function to process LaTeX for display
 function processTextForDisplay(text) {
@@ -1315,17 +1324,8 @@ function processTextForDisplay(text) {
     }
     
     return processed;
-}    // Highlight search terms in text
-    function highlightSearchTerm(text) {
-      if (!currentSearchTerm || !text) return text;
-      
-      // Escape special regex characters
-      const escapedTerm = currentSearchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(`(${escapedTerm})`, 'gi');
-      return text.replace(regex, '<span class="search-highlight">$1</span>');
-    }
-
-    // Update active filter count
+}   
+ // Update active filter count
     function updateFilterCount() {
       let count = 0;
       
