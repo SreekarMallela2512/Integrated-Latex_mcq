@@ -582,40 +582,38 @@ async function updateQuestionNumber() {
     }
 
     // Populate exam dates based on selected year
-   async function populateExamDates() {
-  const year = document.getElementById('year').value;
-  const examDateSelect = document.getElementById('examDate');
-
-  // Clear existing options
-  examDateSelect.innerHTML = '<option value="">-- Select Exam Date --</option>';
-
-  if (!year) {
-    examDateSelect.required = false;
-    updateQuestionNumber(); // Update serial number
-    return;
-  }
-
-  try {
-    // Always use public endpoint for exam dates
-    const response = await fetch(`/public/exam-dates/${year}`);
-    if (!response.ok) throw new Error('Failed to load exam dates');
-
-    const examDates = await response.json();
-    examDates.forEach(dateObj => {
-      const option = document.createElement('option');
-      option.value = dateObj.date;
-      option.textContent = dateObj.label;
-      examDateSelect.appendChild(option);
-    });
-
-    examDateSelect.required = true;
-  } catch (err) {
-    console.error('Error loading exam dates:', err);
-    examDateSelect.required = false;
-  }
-  
-  // Update serial number
-  updateQuestionNumber();
+ async function populateExamDates() {
+    const year = document.getElementById('year').value;
+    const examDateSelect = document.getElementById('examDate');
+    
+    // Clear existing options
+    examDateSelect.innerHTML = '<option value="">-- Select Exam Date --</option>';
+    
+    if (!year) {
+        examDateSelect.required = false;
+        updateQuestionNumber();
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/public/exam-dates/${year}`);
+        if (!response.ok) throw new Error('Failed to load exam dates');
+        
+        const examDates = await response.json();
+        examDates.forEach(dateObj => {
+            const option = document.createElement('option');
+            option.value = dateObj.date;
+            option.textContent = dateObj.label;
+            examDateSelect.appendChild(option);
+        });
+        
+        examDateSelect.required = true;
+    } catch (err) {
+        console.error('Error loading exam dates:', err);
+        examDateSelect.required = false;
+    }
+    
+    updateQuestionNumber();
 }
 
        // Toggle PYQ fields based on selection
@@ -784,38 +782,87 @@ function showSuccess() {
       return true;
     }
 
-    function clearForm() {
-  document.getElementById('mcqForm').reset();
-  document.getElementById('preview').innerHTML = '';
-  // Clear option previews
-  for (let i = 1; i <= 4; i++) {
-    document.getElementById(`preview-option${i}`).innerHTML = '';
-  }
-  document.getElementById('solution-preview').innerHTML = '<em style="color: #777;">Solution preview will appear here...</em>';
-  // Reset difficulty field
-  document.getElementById('difficulty').value = '';
-  document.getElementById('difficulty').placeholder = 'Will be auto-classified...';
-  if (document.getElementById('classificationStatus')) {
-    document.getElementById('classificationStatus').textContent = '';
-  }
-  // Hide PYQ details
-  document.getElementById('pyqDetails').style.display = 'none';
-  // Clear exam date options
-  document.getElementById('examDate').innerHTML = '<option value="">-- Select Exam Date --</option>';
-  
-  // Reset question number field
-  const questionNoInput = document.getElementById('questionNo');
-  questionNoInput.value = '';
-  questionNoInput.readOnly = false;
-  questionNoInput.style.backgroundColor = '';
-  questionNoInput.style.cursor = '';
-  questionNoInput.placeholder = 'e.g., Q1, 1, A-1, etc.';
-  
-  // Hide cancel button if in edit mode
-  const cancelBtn = document.getElementById('cancelEditBtn');
-  if (cancelBtn) {
-    cancelBtn.style.display = editMode ? 'inline-block' : 'none';
-  }
+   function clearForm() {
+    // Store PYQ values before clearing if it's a JEE MAIN PYQ
+    const pyqType = document.getElementById('pyqType').value;
+    let preservedValues = null;
+    
+    if (pyqType === 'JEE MAIN PYQ') {
+        preservedValues = {
+            pyqType: pyqType,
+            year: document.getElementById('year').value,
+            examDate: document.getElementById('examDate').value,
+            shift: document.querySelector('input[name="shift"]:checked')?.value
+        };
+    }
+    
+    // Reset the form
+    document.getElementById('mcqForm').reset();
+    document.getElementById('preview').innerHTML = '';
+    
+    // Clear option previews
+    for (let i = 1; i <= 4; i++) {
+        document.getElementById(`preview-option${i}`).innerHTML = '';
+    }
+    document.getElementById('solution-preview').innerHTML = '<em style="color: #777;">Solution preview will appear here...</em>';
+    
+    // Reset difficulty field
+    document.getElementById('difficulty').value = '';
+    document.getElementById('difficulty').placeholder = 'Will be auto-classified...';
+    if (document.getElementById('classificationStatus')) {
+        document.getElementById('classificationStatus').textContent = '';
+    }
+    
+    // Restore PYQ values if they were preserved
+    if (preservedValues) {
+        // Set PYQ type back
+        document.getElementById('pyqType').value = preservedValues.pyqType;
+        
+        // Show PYQ details section
+        document.getElementById('pyqDetails').style.display = 'block';
+        
+        // Restore year
+        if (preservedValues.year) {
+            document.getElementById('year').value = preservedValues.year;
+            
+            // Reload exam dates for the preserved year
+            populateExamDates().then(() => {
+                // Restore exam date after dates are loaded
+                if (preservedValues.examDate) {
+                    document.getElementById('examDate').value = preservedValues.examDate;
+                }
+                
+                // Restore shift
+                if (preservedValues.shift) {
+                    const shiftRadio = document.querySelector(`input[name="shift"][value="${preservedValues.shift}"]`);
+                    if (shiftRadio) {
+                        shiftRadio.checked = true;
+                    }
+                }
+                
+                // Update question number based on restored values
+                updateQuestionNumber();
+            });
+        }
+    } else {
+        // If not PYQ, hide PYQ details and clear as normal
+        document.getElementById('pyqDetails').style.display = 'none';
+        document.getElementById('examDate').innerHTML = '<option value="">-- Select Exam Date --</option>';
+        
+        // Reset question number field
+        const questionNoInput = document.getElementById('questionNo');
+        questionNoInput.value = '';
+        questionNoInput.readOnly = false;
+        questionNoInput.style.backgroundColor = '';
+        questionNoInput.style.cursor = '';
+        questionNoInput.placeholder = 'e.g., Q1, 1, A-1, etc.';
+    }
+    
+    // Hide cancel button if in edit mode
+    const cancelBtn = document.getElementById('cancelEditBtn');
+    if (cancelBtn) {
+        cancelBtn.style.display = editMode ? 'inline-block' : 'none';
+    }
 }
     function updateTopics() {
       const subject = document.getElementById("subject").value;
@@ -844,71 +891,80 @@ function showSuccess() {
 
     // Form submission handler
     form.addEventListener('submit', async function(event) {
-      event.preventDefault();
+    event.preventDefault();
 
-      const formData = new FormData(form);
-      const data = {
+    const formData = new FormData(form);
+    const data = {
         questionNo: formData.get('questionNo'),
         question: formData.get('question'),
         options: [
-          formData.get('option1'),
-          formData.get('option2'),
-          formData.get('option3'),
-          formData.get('option4')
+            formData.get('option1'),
+            formData.get('option2'),
+            formData.get('option3'),
+            formData.get('option4')
         ],
         correctOption: formData.get('correctOption'),
         subject: formData.get('subject'),
         topic: formData.get('topic'),
         difficulty: formData.get('difficulty').toLowerCase(),
-        solution: formData.get('solution') || '', // Ensure lowercase
+        solution: formData.get('solution') || '',
         pyqType: formData.get('pyqType'),
         shift: formData.get('shift') || 'N/A',
         year: formData.get('year') ? parseInt(formData.get('year')) : null,
         examDate: formData.get('examDate') || null,
-        autoClassified: wasAutoClassified // Add this
-      };
+        autoClassified: wasAutoClassified
+    };
 
-      // Validate difficulty
-      if (!data.difficulty || !['easy', 'medium', 'hard'].includes(data.difficulty)) {
+    // Validate difficulty
+    if (!data.difficulty || !['easy', 'medium', 'hard'].includes(data.difficulty)) {
         alert('Please wait for difficulty classification or enter manually (easy/medium/hard)');
         return;
-      }
+    }
 
-      try {
+    try {
         let response;
         let successMessage;
 
         if (editMode && editingQuestionId) {
-          // Update existing question
-          response = await fetch(`/questions/${editingQuestionId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-          });
-          successMessage = 'Question updated successfully!';
+            // Update existing question
+            response = await fetch(`/questions/${editingQuestionId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+            successMessage = 'Question updated successfully!';
         } else {
-          // Create new question
-          response = await fetch('/submit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-          });
-          successMessage = 'Question added successfully!';
+            // Create new question
+            response = await fetch('/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+            successMessage = 'Question added successfully!';
         }
 
         if (response.ok) {
-          alert(successMessage);
-          cancelEdit(); // This will clear form and reset edit mode
-          loadQuestions(); // Reload questions to show updated data
+            alert(successMessage);
+            
+            // Changed: Use conditional clearing based on edit mode
+            if (editMode) {
+                // In edit mode, use cancelEdit to fully reset
+                cancelEdit();
+            } else {
+                // In normal mode, use clearForm which preserves PYQ fields
+                clearForm();
+            }
+            
+            loadQuestions(); // Reload questions to show updated data
         } else {
-          const errorText = await response.text();
-          alert('Failed to save question: ' + errorText);
+            const errorText = await response.text();
+            alert('Failed to save question: ' + errorText);
         }
-      } catch (error) {
+    } catch (error) {
         alert('Error: ' + error.message);
-      }
-      wasAutoClassified = false;
-    });
+    }
+    wasAutoClassified = false;
+});
 function initializeFilters() {
   console.log('Initializing filters...');
   
