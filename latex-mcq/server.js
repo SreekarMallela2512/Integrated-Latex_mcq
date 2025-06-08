@@ -660,7 +660,6 @@ function getHardcodedExamDates(year) {
       { date: '2025-04-12', label: 'April 12, 2025' }
     ],
     2024: [
-      { date: '2024-01-24', label: 'January 24, 2024' },
       { date: '2024-01-27', label: 'January 27, 2024' },
       { date: '2024-01-29', label: 'January 29, 2024' },
       { date: '2024-01-31', label: 'January 31, 2024' },
