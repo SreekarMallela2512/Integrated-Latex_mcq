@@ -18,7 +18,47 @@
       <button id="logoutBtn" class="logout-btn">Logout</button>
     </div>
 <!-- Add this section in index.html after the user-info-bar div and before the h1 tag -->
+<!-- Supreme User Approval Section (Only visible to supreme users) -->
+<div id="supremeUserSection" class="supreme-section" style="display: none;">
+  <h2>👑 Supreme User - Question Approval</h2>
+  
+  <!-- Approval Statistics -->
+  <div class="approval-stats-card">
+    <h3>📊 Approval Statistics</h3>
+    <div class="stats-grid">
+      <div class="stat-item pending">
+        <span class="stat-number" id="pendingCount">0</span>
+        <span class="stat-label">Pending</span>
+      </div>
+      <div class="stat-item approved">
+        <span class="stat-number" id="approvedCount">0</span>
+        <span class="stat-label">Approved</span>
+      </div>
+      <div class="stat-item rejected">
+        <span class="stat-number" id="rejectedCount">0</span>
+        <span class="stat-label">Rejected</span>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Pending Questions List -->
+  <div class="pending-questions-card">
+    <h3>⏳ Pending Questions for Approval</h3>
+    <div class="approval-controls">
+      <button onclick="selectAllPending()" class="select-all-btn">Select All</button>
+      <button onclick="bulkApprove()" class="bulk-approve-btn">Bulk Approve Selected</button>
+      <button onclick="refreshPendingQuestions()" class="refresh-btn">🔄 Refresh</button>
+    </div>
+    <div id="pendingQuestionsList" class="pending-list"></div>
+  </div>
+  
+  <button onclick="toggleSupremeSection()" class="supreme-toggle-btn">Hide Supreme Panel</button>
+</div>
 
+<!-- Supreme User Toggle Button (Only visible to supreme users) -->
+<button id="supremeToggleBtn" onclick="toggleSupremeSection()" class="supreme-toggle-btn" style="display: none;">
+  Show Supreme Panel
+</button>
 <!-- Admin Management Section (Only visible to superusers) -->
 <div id="adminSection" class="admin-section" style="display: none;">
   <h2>🔧 Admin Management</h2>
@@ -273,6 +313,16 @@
       </select>
     </div>
   </div>
+  <!-- Add this option to the filter section for approval status -->
+<div class="filter-group">
+    <label>Approval Status:</label>
+    <select id="filterApprovalStatus" onchange="applyFilters()">
+        <option value="">All Status</option>
+        <option value="pending">Pending</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+    </select>
+</div>
 
   <!-- Filter Actions -->
   <div class="filter-actions">
@@ -563,23 +613,66 @@ async function updateQuestionNumber() {
     };
 
     function updateUserInterface() {
-      document.getElementById('welcomeMessage').textContent = `Welcome, ${currentUser.username}!`;
-      const roleElement = document.getElementById('userRole');
-      roleElement.textContent = currentUser.role === 'superuser' ? 'Super User' : 'User';
-      roleElement.className = `role-badge ${currentUser.role}`;
-
-      const questionsTitle = document.getElementById('questionsTitle');
-      questionsTitle.textContent = currentUser.role === 'superuser' ? 'All Questions' : 'Your Questions';
-
-      // Show admin features for superusers
-      if (currentUser.role === 'superuser') {
+    document.getElementById('welcomeMessage').textContent = `Welcome, ${currentUser.username}!`;
+    const roleElement = document.getElementById('userRole');
+    
+    if (currentUser.role === 'supremeuser') {
+        roleElement.textContent = 'Supreme User';
+        roleElement.className = 'role-badge supremeuser';
+        document.getElementById('supremeToggleBtn').style.display = 'block';
+        // Also show admin features for supreme users
         document.getElementById('adminToggleBtn').style.display = 'block';
-      } else {
-        // For regular users, still load basic years for the PYQ dropdown
+        loadApprovalStats();
+    } else if (currentUser.role === 'superuser') {
+        roleElement.textContent = 'Super User';
+        roleElement.className = 'role-badge superuser';
+        document.getElementById('adminToggleBtn').style.display = 'block';
+    } else {
+        roleElement.textContent = 'User';
+        roleElement.className = 'role-badge user';
+    }
+    
+    const questionsTitle = document.getElementById('questionsTitle');
+    questionsTitle.textContent = (currentUser.role === 'superuser' || currentUser.role === 'supremeuser') 
+        ? 'All Questions' : 'Your Questions';
+        
+    // For regular users, still load basic years for the PYQ dropdown
+    if (currentUser.role === 'user') {
         const defaultYears = [2025, 2024, 2023, 2022, 2021];
         updateMainPyqYearDropdown(defaultYears);
-      }
     }
+}
+function updateUserInterface() {
+    document.getElementById('welcomeMessage').textContent = `Welcome, ${currentUser.username}!`;
+    const roleElement = document.getElementById('userRole');
+    
+    if (currentUser.role === 'supremeuser') {
+        roleElement.textContent = 'Supreme User';
+        roleElement.className = 'role-badge supremeuser';
+        document.getElementById('supremeToggleBtn').style.display = 'block';
+        // Also show admin features for supreme users
+        document.getElementById('adminToggleBtn').style.display = 'block';
+        loadApprovalStats();
+    } else if (currentUser.role === 'superuser') {
+        roleElement.textContent = 'Super User';
+        roleElement.className = 'role-badge superuser';
+        document.getElementById('adminToggleBtn').style.display = 'block';
+    } else {
+        roleElement.textContent = 'User';
+        roleElement.className = 'role-badge user';
+    }
+    
+    const questionsTitle = document.getElementById('questionsTitle');
+    questionsTitle.textContent = (currentUser.role === 'superuser' || currentUser.role === 'supremeuser') 
+        ? 'All Questions' : 'Your Questions';
+        
+    // For regular users, still load basic years for the PYQ dropdown
+    if (currentUser.role === 'user') {
+        const defaultYears = [2025, 2024, 2023, 2022, 2021];
+        updateMainPyqYearDropdown(defaultYears);
+    }
+}
+
 
     // Populate exam dates based on selected year
  async function populateExamDates() {
@@ -1148,6 +1241,7 @@ async function loadQuestions() {
         pyqType: document.getElementById('filterPyqType')?.value || '',
         year: document.getElementById('filterYear')?.value || '',
         creator: document.getElementById('filterCreator')?.value || '',
+        approvalStatus: document.getElementById('filterApprovalStatus')?.value || '',
         sortBy: document.getElementById('sortBy')?.value || 'createdAt-desc'
       };
 
@@ -1237,6 +1331,7 @@ function highlightSearchTerm(text) {
     // Display filtered questions
     // Display filtered questions
 // Display filtered questions
+const originalDisplayFilteredQuestions = displayFilteredQuestions;
 function displayFilteredQuestions() {
     const list = document.getElementById('questionList');
     if (!list) return;
@@ -1251,25 +1346,36 @@ function displayFilteredQuestions() {
     filteredQuestions.forEach((q, i) => {
         const div = document.createElement('div');
         div.className = 'question-card';
+           let approvalBadge = '';
+        if (q.approvalStatus) {
+            const statusClass = q.approvalStatus === 'approved' ? 'approved' : 
+                               q.approvalStatus === 'rejected' ? 'rejected' : 'pending';
+            approvalBadge = `<span class="approval-badge ${statusClass}">${q.approvalStatus.toUpperCase()}</span>`;
+        }
+        
 
-        let creatorInfo = '';
-        if (currentUser.role === 'superuser' && q.createdBy) {
-            const createdDate = new Date(q.createdAt);
-            const formattedDateTime = createdDate.toLocaleString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: true
-            });
+           let creatorInfo = '';
+        if (currentUser.role === 'superuser' || currentUser.role === 'supremeuser') {
+            if (q.createdBy) {
+                const createdDate = new Date(q.createdAt);
+                const formattedDateTime = createdDate.toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true
+                });
             creatorInfo = `
                 <div class="creator-info">
                     <div><strong>Created by:</strong> ${q.createdBy.username || 'Unknown'}</div>
                     <div><strong>Created on:</strong> ${formattedDateTime}</div>
+                    ${q.approvedBy ? `<div><strong>Approved by:</strong> ${q.approvedBy.username || 'Unknown'}</div>` : ''}
+                        ${q.rejectionReason ? `<div class="rejection-reason"><strong>Rejection reason:</strong> ${q.rejectionReason}</div>` : ''}
                 </div>
             `;
+              }
         }
 
         let pyqInfo = '';
@@ -1448,7 +1554,10 @@ function processTextForDisplay(text) {
       document.getElementById('filterPyqType').value = '';
       document.getElementById('filterYear').value = '';
       document.getElementById('sortBy').value = 'createdAt-desc';
-      
+
+       const approvalStatusFilter = document.getElementById('filterApprovalStatus');
+    if (approvalStatusFilter) approvalStatusFilter.value = '';
+    
       const creatorFilter = document.getElementById('filterCreator');
       if (creatorFilter) {
         creatorFilter.value = '';

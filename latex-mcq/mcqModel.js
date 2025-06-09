@@ -43,6 +43,22 @@ const mcqSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Add these fields to your existing mcqSchema
+approvalStatus: {
+  type: String,
+  enum: ['pending', 'approved', 'rejected'],
+  default: 'pending'
+},
+approvedBy: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'User'
+},
+approvedAt: {
+  type: Date
+},
+rejectionReason: {
+  type: String
+},
   createdAt: { type: Date, default: Date.now }
 });
 

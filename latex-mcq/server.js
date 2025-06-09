@@ -1112,6 +1112,209 @@ app.get('/questions/count/:baseSerial', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Failed to count questions' });
   }
 });
+// Import the new model at the top
+const ApprovedMCQ = require('./approvedMcqModel');
+
+// Middleware to check supreme user role
+const requireSupremeUser = (req, res, next) => {
+  if (req.session.userId && req.session.userRole === 'supremeuser') {
+    next();
+  } else {
+    res.status(403).json({ error: 'Supreme user access required' });
+  }
+};
+
+// Get pending questions for approval (supremeuser only)
+app.get('/pending-questions', requireSupremeUser, async (req, res) => {
+  try {
+    const pendingQuestions = await MCQ.find({ approvalStatus: 'pending' })
+      .populate('createdBy', 'username')
+      .sort({ createdAt: -1 });
+    
+    res.json(pendingQuestions);
+  } catch (error) {
+    console.error('Error fetching pending questions:', error);
+    res.status(500).json({ error: 'Error fetching pending questions' });
+  }
+});
+
+// Approve a question (supremeuser only)
+app.post('/approve-question/:id', requireSupremeUser, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Find the question
+    const question = await MCQ.findById(id);
+    if (!question) {
+      return res.status(404).json({ error: 'Question not found' });
+    }
+    
+    // Check if already approved
+    if (question.approvalStatus === 'approved') {
+      return res.status(400).json({ error: 'Question already approved' });
+    }
+    
+    // Create approved question in secured database
+    const approvedQuestion = new ApprovedMCQ({
+      originalQuestionId: question._id,
+      questionNo: question.questionNo,
+      question: question.question,
+      options: question.options,
+      correctOption: question.correctOption,
+      subject: question.subject,
+      topic: question.topic,
+      difficulty: question.difficulty,
+      solution: question.solution,
+      pyqType: question.pyqType,
+      shift: question.shift,
+      year: question.year,
+      examDate: question.examDate,
+      createdBy: question.createdBy,
+      approvedBy: req.session.userId,
+      autoClassified: question.autoClassified
+    });
+    
+    await approvedQuestion.save();
+    
+    // Update original question status
+    question.approvalStatus = 'approved';
+    question.approvedBy = req.session.userId;
+    question.approvedAt = new Date();
+    await question.save();
+    
+    res.json({ 
+      message: 'Question approved successfully',
+      approvedQuestion: approvedQuestion
+    });
+  } catch (error) {
+    console.error('Error approving question:', error);
+    res.status(500).json({ error: 'Error approving question' });
+  }
+});
+
+// Reject a question (supremeuser only)
+app.post('/reject-question/:id', requireSupremeUser, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    
+    const question = await MCQ.findById(id);
+    if (!question) {
+      return res.status(404).json({ error: 'Question not found' });
+    }
+    
+    question.approvalStatus = 'rejected';
+    question.rejectionReason = reason || 'No reason provided';
+    await question.save();
+    
+    res.json({ message: 'Question rejected successfully' });
+  } catch (error) {
+    console.error('Error rejecting question:', error);
+    res.status(500).json({ error: 'Error rejecting question' });
+  }
+});
+
+// Get approved questions (accessible to all authenticated users)
+app.get('/approved-questions', requireAuth, async (req, res) => {
+  try {
+    const approvedQuestions = await ApprovedMCQ.find()
+      .populate('createdBy', 'username')
+      .populate('approvedBy', 'username')
+      .sort({ approvedAt: -1 });
+    
+    res.json(approvedQuestions);
+  } catch (error) {
+    console.error('Error fetching approved questions:', error);
+    res.status(500).json({ error: 'Error fetching approved questions' });
+  }
+});
+
+// Get approval statistics (supremeuser only)
+app.get('/approval-stats', requireSupremeUser, async (req, res) => {
+  try {
+    const stats = await MCQ.aggregate([
+      {
+        $group: {
+          _id: '$approvalStatus',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    const formattedStats = {
+      pending: 0,
+      approved: 0,
+      rejected: 0
+    };
+    
+    stats.forEach(stat => {
+      if (stat._id) {
+        formattedStats[stat._id] = stat.count;
+      }
+    });
+    
+    res.json(formattedStats);
+  } catch (error) {
+    console.error('Error fetching approval stats:', error);
+    res.status(500).json({ error: 'Error fetching statistics' });
+  }
+});
+
+// Bulk approve questions (supremeuser only)
+app.post('/bulk-approve', requireSupremeUser, async (req, res) => {
+  try {
+    const { questionIds } = req.body;
+    
+    if (!Array.isArray(questionIds) || questionIds.length === 0) {
+      return res.status(400).json({ error: 'No questions selected' });
+    }
+    
+    let approvedCount = 0;
+    
+    for (const questionId of questionIds) {
+      const question = await MCQ.findById(questionId);
+      if (question && question.approvalStatus === 'pending') {
+        // Create approved question
+        const approvedQuestion = new ApprovedMCQ({
+          originalQuestionId: question._id,
+          questionNo: question.questionNo,
+          question: question.question,
+          options: question.options,
+          correctOption: question.correctOption,
+          subject: question.subject,
+          topic: question.topic,
+          difficulty: question.difficulty,
+          solution: question.solution,
+          pyqType: question.pyqType,
+          shift: question.shift,
+          year: question.year,
+          examDate: question.examDate,
+          createdBy: question.createdBy,
+          approvedBy: req.session.userId,
+          autoClassified: question.autoClassified
+        });
+        
+        await approvedQuestion.save();
+        
+        // Update original question
+        question.approvalStatus = 'approved';
+        question.approvedBy = req.session.userId;
+        question.approvedAt = new Date();
+        await question.save();
+        
+        approvedCount++;
+      }
+    }
+    
+    res.json({ 
+      message: `Successfully approved ${approvedCount} questions`,
+      approvedCount 
+    });
+  } catch (error) {
+    console.error('Error in bulk approval:', error);
+    res.status(500).json({ error: 'Error in bulk approval' });
+  }
+});
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
