@@ -641,6 +641,293 @@ window.onload = async () => {
         updateMainPyqYearDropdown(defaultYears);
     }
 }
+// Supreme User Functions (Add these before updateUserInterface)
+let selectedPendingQuestions = new Set();
+
+// Load approval statistics
+async function loadApprovalStats() {
+    try {
+        const response = await fetch('/approval-stats');
+        if (!response.ok) {
+            console.log('User does not have access to approval stats');
+            return;
+        }
+        
+        const stats = await response.json();
+        
+        // Only update if elements exist
+        if (document.getElementById('pendingCount')) {
+            document.getElementById('pendingCount').textContent = stats.pending || 0;
+        }
+        if (document.getElementById('approvedCount')) {
+            document.getElementById('approvedCount').textContent = stats.approved || 0;
+        }
+        if (document.getElementById('rejectedCount')) {
+            document.getElementById('rejectedCount').textContent = stats.rejected || 0;
+        }
+    } catch (error) {
+        console.error('Error loading approval stats:', error);
+    }
+}
+
+// Toggle supreme user section
+function toggleSupremeSection() {
+    const supremeSection = document.getElementById('supremeUserSection');
+    const toggleBtn = document.getElementById('supremeToggleBtn');
+    
+    if (!supremeSection || !toggleBtn) {
+        console.error('Supreme user section elements not found');
+        return;
+    }
+    
+    if (supremeSection.style.display === 'none') {
+        supremeSection.style.display = 'block';
+        toggleBtn.style.display = 'none';
+        loadPendingQuestions();
+        loadApprovalStats();
+    } else {
+        supremeSection.style.display = 'none';
+        toggleBtn.style.display = 'block';
+    }
+}
+
+// Load pending questions
+async function loadPendingQuestions() {
+    try {
+        const response = await fetch('/pending-questions');
+        if (!response.ok) throw new Error('Failed to load pending questions');
+        
+        const questions = await response.json();
+        displayPendingQuestions(questions);
+    } catch (error) {
+        console.error('Error loading pending questions:', error);
+        const pendingList = document.getElementById('pendingQuestionsList');
+        if (pendingList) {
+            pendingList.innerHTML = '<p class="error-message">Error loading pending questions</p>';
+        }
+    }
+}
+
+// Display pending questions
+function displayPendingQuestions(questions) {
+    const container = document.getElementById('pendingQuestionsList');
+    if (!container) return;
+    
+    if (questions.length === 0) {
+        container.innerHTML = '<p class="no-questions">No pending questions for approval</p>';
+        return;
+    }
+    
+    container.innerHTML = questions.map((q, index) => {
+        const isChecked = selectedPendingQuestions.has(q._id) ? 'checked' : '';
+        const processedQuestion = processTextForDisplay(q.question);
+        const processedOptions = q.options.map((opt, idx) => {
+            const processedOpt = processTextForDisplay(opt);
+            const isCorrect = idx === q.correctOption;
+            return `
+                <div class="option-item ${isCorrect ? 'correct-option' : ''}">
+                    <span class="option-label">${String.fromCharCode(65 + idx)}:</span>
+                    <span class="option-text">${processedOpt}</span>
+                </div>
+            `;
+        }).join('');
+        
+        return `
+            <div class="pending-question-card">
+                <div class="question-select">
+                    <input type="checkbox" id="pending-${q._id}" 
+                           value="${q._id}" ${isChecked}
+                           onchange="toggleQuestionSelection('${q._id}')">
+                </div>
+                <div class="question-content">
+                    <div class="question-meta">
+                        <span class="question-number">Q${index + 1}: ${q.questionNo}</span>
+                        <span class="created-by">By: ${q.createdBy?.username || 'Unknown'}</span>
+                        <span class="subject-badge ${q.subject.toLowerCase()}">${q.subject}</span>
+                        <span class="difficulty-badge ${q.difficulty}">${q.difficulty}</span>
+                        ${q.pyqType !== 'Not PYQ' ? `<span class="pyq-badge">${q.pyqType}</span>` : ''}
+                    </div>
+                    <div class="question-text">${processedQuestion}</div>
+                    <div class="options-preview">
+                        ${processedOptions}
+                    </div>
+                    ${q.solution ? `
+                        <div class="solution-preview">
+                            <strong>Solution:</strong>
+                            <div class="solution-content">${processTextForDisplay(q.solution)}</div>
+                        </div>
+                    ` : ''}
+                    <div class="approval-actions">
+                        <button onclick="approveQuestion('${q._id}')" class="approve-btn">
+                            ✅ Approve
+                        </button>
+                        <button onclick="showRejectDialog('${q._id}')" class="reject-btn">
+                            ❌ Reject
+                        </button>
+                        <button onclick="previewQuestion('${q._id}')" class="preview-btn">
+                            👁️ Full Preview
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    // Re-render MathJax
+    if (window.MathJax) {
+        MathJax.typesetClear([container]);
+        MathJax.typesetPromise([container]).catch(err => console.error('MathJax error:', err));
+    }
+}
+
+// Toggle question selection
+function toggleQuestionSelection(questionId) {
+    if (selectedPendingQuestions.has(questionId)) {
+        selectedPendingQuestions.delete(questionId);
+    } else {
+        selectedPendingQuestions.add(questionId);
+    }
+}
+
+// Select all pending questions
+function selectAllPending() {
+    const checkboxes = document.querySelectorAll('#pendingQuestionsList input[type="checkbox"]');
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    
+    checkboxes.forEach(cb => {
+        cb.checked = !allChecked;
+        if (!allChecked) {
+            selectedPendingQuestions.add(cb.value);
+        } else {
+            selectedPendingQuestions.delete(cb.value);
+        }
+    });
+}
+
+// Approve single question
+async function approveQuestion(questionId) {
+    if (!confirm('Are you sure you want to approve this question?')) return;
+    
+    try {
+        const response = await fetch(`/approve-question/${questionId}`, {
+            method: 'POST'
+        });
+        
+        if (!response.ok) throw new Error('Failed to approve question');
+        
+        const result = await response.json();
+        alert(result.message);
+        
+        // Refresh lists
+        loadPendingQuestions();
+        loadApprovalStats();
+        if (typeof loadQuestions === 'function') loadQuestions();
+    } catch (error) {
+        console.error('Error approving question:', error);
+        alert('Error approving question');
+    }
+}
+
+// Show reject dialog
+function showRejectDialog(questionId) {
+    const reason = prompt('Please provide a reason for rejection:');
+    if (reason !== null) {
+        rejectQuestion(questionId, reason);
+    }
+}
+
+// Reject question
+async function rejectQuestion(questionId, reason) {
+    try {
+        const response = await fetch(`/reject-question/${questionId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason })
+        });
+        
+        if (!response.ok) throw new Error('Failed to reject question');
+        
+        const result = await response.json();
+        alert(result.message);
+        
+        // Refresh lists
+        loadPendingQuestions();
+        loadApprovalStats();
+    } catch (error) {
+        console.error('Error rejecting question:', error);
+        alert('Error rejecting question');
+    }
+}
+
+// Bulk approve selected questions
+async function bulkApprove() {
+    if (selectedPendingQuestions.size === 0) {
+        alert('Please select questions to approve');
+        return;
+    }
+    
+    if (!confirm(`Are you sure you want to approve ${selectedPendingQuestions.size} questions?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/bulk-approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ questionIds: Array.from(selectedPendingQuestions) })
+        });
+        
+        if (!response.ok) throw new Error('Failed to bulk approve');
+        
+        const result = await response.json();
+        alert(result.message);
+        
+        // Clear selections
+        selectedPendingQuestions.clear();
+        
+        // Refresh lists
+        loadPendingQuestions();
+        loadApprovalStats();
+        if (typeof loadQuestions === 'function') loadQuestions();
+    } catch (error) {
+        console.error('Error in bulk approval:', error);
+        alert('Error in bulk approval');
+    }
+}
+
+// Preview question in modal
+function previewQuestion(questionId) {
+    const questionCard = document.querySelector(`#pending-${questionId}`)?.closest('.pending-question-card');
+    if (questionCard) {
+        const modal = document.createElement('div');
+        modal.className = 'preview-modal';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Question Preview</h3>
+                    <button onclick="this.closest('.preview-modal').remove()" class="close-btn">×</button>
+                </div>
+                <div class="modal-body">
+                    ${questionCard.querySelector('.question-content').innerHTML}
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+        // Re-render MathJax in modal
+        if (window.MathJax) {
+            MathJax.typesetClear([modal]);
+            MathJax.typesetPromise([modal]).catch(err => console.error('MathJax error:', err));
+        }
+    }
+}
+
+// Refresh pending questions
+function refreshPendingQuestions() {
+    selectedPendingQuestions.clear();
+    loadPendingQuestions();
+    loadApprovalStats();
+}
 function updateUserInterface() {
     document.getElementById('welcomeMessage').textContent = `Welcome, ${currentUser.username}!`;
     const roleElement = document.getElementById('userRole');
