@@ -583,35 +583,34 @@ async function updateQuestionNumber() {
     }
 
     // Check authentication on page load
-    window.onload = async () => {
-      try {
-        const response = await fetch('/auth/status');
-        const data = await response.json();
-        
-        if (!data.authenticated) {
-          window.location.href = '/login.html';
-          return;
-        }
-        
-        currentUser = data.user;
-        updateUserInterface();
-        
-        // Add classification status indicator
-        addClassificationStatus();
-        
-        // Always load years for all users
-        await loadYears();
-        
-        // Setup batch classification for superusers
-        if (currentUser.role === 'superuser') {
-          setupBatchClassification();
-        }
-
-      } catch (error) {
-        window.location.href = '/login.html';
-      }
-    };
-
+    // Update the window.onload function
+window.onload = async () => {
+  try {
+    console.log('Checking authentication...');
+    
+    const response = await fetch('/auth/status', {
+      credentials: 'same-origin' // Important!
+    });
+    
+    const data = await response.json();
+    console.log('Auth status:', data);
+    
+    if (!data.authenticated) {
+      console.log('Not authenticated, redirecting to login');
+      window.location.href = '/login.html';
+      return;
+    }
+    
+    currentUser = data.user;
+    console.log('User authenticated:', currentUser);
+    updateUserInterface();
+    
+    // Rest of your initialization code...
+  } catch (error) {
+    console.error('Auth check error:', error);
+    window.location.href = '/login.html';
+  }
+};
     function updateUserInterface() {
     document.getElementById('welcomeMessage').textContent = `Welcome, ${currentUser.username}!`;
     const roleElement = document.getElementById('userRole');
@@ -1557,7 +1556,7 @@ function processTextForDisplay(text) {
 
        const approvalStatusFilter = document.getElementById('filterApprovalStatus');
     if (approvalStatusFilter) approvalStatusFilter.value = '';
-    
+
       const creatorFilter = document.getElementById('filterCreator');
       if (creatorFilter) {
         creatorFilter.value = '';

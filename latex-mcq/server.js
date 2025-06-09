@@ -41,23 +41,21 @@ connectWithRetry();
 
 // Session configuration
 // Session configuration - UPDATE THIS PART
+// Session configuration - FIXED VERSION
 app.use(session({
   secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
   resave: false,
   saveUninitialized: false,
   store: MongoStore.create({
     mongoUrl: process.env.MONGODB_URI,
-    touchAfter: 24 * 3600 // lazy session update
+    touchAfter: 24 * 3600
   }),
   cookie: {
-    secure: process.env.NODE_ENV === 'production', // This should be true in production
+    secure: false, // Set to false for development, true for production with HTTPS
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: 'strict' // Add this for CSRF protection
-  },
-  // Add these for proxy support (Render uses proxy)
-  proxy: true, // Trust the reverse proxy
-  name: 'sessionId' // Custom session name
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: 'lax' // Change from 'strict' to 'lax'
+  }
 }));
 
 // Add this BEFORE session middleware to trust proxy
@@ -134,6 +132,7 @@ app.post('/register', async (req, res) => {
 
 app.post('/login', async (req, res) => {
   try {
+    console.log('Login attempt:', req.body.username);
     const { username, password } = req.body;
     
     const user = await User.findOne({
@@ -144,20 +143,35 @@ app.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
     
+    // Set session data
     req.session.userId = user._id;
     req.session.username = user.username;
     req.session.userRole = user.role;
     
-    res.json({
-      message: 'Login successful',
-      user: {
-        id: user._id,
-        username: user.username,
-        role: user.role
+    // Force session save
+    req.session.save((err) => {
+      if (err) {
+        console.error('Session save error:', err);
+        return res.status(500).json({ error: 'Session save failed' });
       }
+      
+      console.log('Session saved:', {
+        sessionId: req.sessionID,
+        userId: req.session.userId,
+        userRole: req.session.userRole
+      });
+      
+      res.json({
+        message: 'Login successful',
+        user: {
+          id: user._id,
+          username: user.username,
+          role: user.role
+        }
+      });
     });
   } catch (error) {
-    console.error(error);
+    console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
@@ -173,6 +187,12 @@ app.post('/logout', (req, res) => {
 
 // Check authentication status
 app.get('/auth/status', (req, res) => {
+  console.log('Auth check:', {
+    sessionId: req.sessionID,
+    userId: req.session.userId,
+    cookies: req.headers.cookie
+  });
+  
   if (req.session.userId) {
     res.json({
       authenticated: true,
@@ -186,7 +206,36 @@ app.get('/auth/status', (req, res) => {
     res.json({ authenticated: false });
   }
 });
+// Trust proxy BEFORE session middleware
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 
+// Session configuration
+const sessionConfig = {
+  secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGODB_URI,
+    touchAfter: 24 * 3600,
+    crypto: {
+      secret: process.env.SESSION_SECRET || 'your-secret-key-change-this'
+    }
+  }),
+  cookie: {
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+  }
+};
+
+// Set secure cookies only in production with HTTPS
+if (process.env.NODE_ENV === 'production') {
+  sessionConfig.cookie.secure = true;
+}
+
+app.use(session(sessionConfig));
 // MCQ submission route - UPDATED WITH SOLUTION FIELD
 app.post('/submit', requireAuth, async (req, res) => {
   try {

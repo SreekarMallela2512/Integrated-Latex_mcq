@@ -59,6 +59,15 @@
   </div>
 
   <script>
+    // Enable debug logging
+    const DEBUG = true;
+    
+    function debugLog(message, data) {
+      if (DEBUG) {
+        console.log(`[Login Debug] ${message}`, data || '');
+      }
+    }
+
     function showLogin() {
       document.getElementById('loginForm').classList.add('active');
       document.getElementById('registerForm').classList.remove('active');
@@ -90,24 +99,34 @@
       const username = document.getElementById('loginUsername').value;
       const password = document.getElementById('loginPassword').value;
       
+      debugLog('Login attempt for username:', username);
+      
       try {
         const response = await fetch('/login', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json' 
+          },
+          credentials: 'same-origin', // IMPORTANT: Include credentials
           body: JSON.stringify({ username, password })
         });
         
         const data = await response.json();
+        debugLog('Login response:', data);
         
         if (response.ok) {
           showMessage('Login successful! Redirecting...', 'success');
+          
+          // Add a small delay to ensure session is saved
           setTimeout(() => {
-            window.location.href = '/';
-          }, 1500);
+            debugLog('Redirecting to index.html');
+            window.location.href = '/index.html'; // Changed from '/' to '/index.html'
+          }, 500);
         } else {
           showMessage(data.error || 'Login failed');
         }
       } catch (error) {
+        debugLog('Login error:', error);
         showMessage('Network error. Please try again.');
       }
     });
@@ -120,40 +139,145 @@
       const email = document.getElementById('regEmail').value;
       const password = document.getElementById('regPassword').value;
       
+      debugLog('Registration attempt:', { username, email });
+      
       try {
         const response = await fetch('/register', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json' 
+          },
+          credentials: 'same-origin', // IMPORTANT: Include credentials
           body: JSON.stringify({ username, email, password })
         });
         
         const data = await response.json();
+        debugLog('Registration response:', data);
         
         if (response.ok) {
           showMessage('Registration successful! Please login.', 'success');
           showLogin();
           document.getElementById('registerForm').reset();
+          // Pre-fill username in login form
+          document.getElementById('loginUsername').value = username;
         } else {
           showMessage(data.error || 'Registration failed');
         }
       } catch (error) {
+        debugLog('Registration error:', error);
         showMessage('Network error. Please try again.');
       }
     });
 
     // Check if user is already logged in
     window.onload = async () => {
+      debugLog('Checking authentication status...');
+      
       try {
-        const response = await fetch('/auth/status');
+        const response = await fetch('/auth/status', {
+          credentials: 'same-origin' // IMPORTANT: Include credentials
+        });
+        
         const data = await response.json();
+        debugLog('Auth status:', data);
         
         if (data.authenticated) {
-          window.location.href = '/';
+          debugLog('User is authenticated, redirecting to index.html');
+          window.location.href = '/index.html'; // Changed from '/' to '/index.html'
+        } else {
+          debugLog('User is not authenticated');
         }
       } catch (error) {
+        debugLog('Auth check error:', error);
         console.log('Not authenticated');
       }
     };
+
+    // Add session debug helper
+    async function checkSession() {
+      try {
+        const response = await fetch('/test-session', {
+          credentials: 'same-origin'
+        });
+        const data = await response.json();
+        debugLog('Session test:', data);
+      } catch (error) {
+        debugLog('Session test error:', error);
+      }
+    }
+
+    // Check for URL parameters (useful for debugging)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('error')) {
+      showMessage(decodeURIComponent(urlParams.get('error')));
+    }
+    if (urlParams.get('message')) {
+      showMessage(decodeURIComponent(urlParams.get('message')), 'success');
+    }
+
+    // Add keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      // Ctrl/Cmd + Enter to submit active form
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        const activeForm = document.querySelector('.auth-form.active');
+        if (activeForm) {
+          activeForm.dispatchEvent(new Event('submit'));
+        }
+      }
+    });
+
+    // Auto-focus first input field
+    window.addEventListener('load', () => {
+      const firstInput = document.querySelector('.auth-form.active input');
+      if (firstInput) {
+        firstInput.focus();
+      }
+    });
+
+    // Add input validation feedback
+    const inputs = document.querySelectorAll('input[required]');
+    inputs.forEach(input => {
+      input.addEventListener('blur', () => {
+        if (!input.validity.valid) {
+          input.classList.add('invalid');
+        } else {
+          input.classList.remove('invalid');
+        }
+      });
+    });
+
+    // Password visibility toggle (optional feature)
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
+    passwordInputs.forEach(input => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'password-wrapper';
+      input.parentNode.insertBefore(wrapper, input);
+      wrapper.appendChild(input);
+      
+      const toggleBtn = document.createElement('button');
+      toggleBtn.type = 'button';
+      toggleBtn.className = 'password-toggle';
+      toggleBtn.innerHTML = '👁️';
+      toggleBtn.onclick = () => {
+        if (input.type === 'password') {
+          input.type = 'text';
+          toggleBtn.innerHTML = '🙈';
+        } else {
+          input.type = 'password';
+          toggleBtn.innerHTML = '👁️';
+        }
+      };
+      wrapper.appendChild(toggleBtn);
+    });
+  </script>
+
+  
+
+  <script>
+    // Show debug indicator if debug mode is on
+    if (DEBUG) {
+      document.documentElement.style.setProperty('--debug-display', 'block');
+    }
   </script>
 </body>
 </html>
