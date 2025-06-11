@@ -23,7 +23,37 @@ const app = express();
 // Get port from environment variable (Render sets this)
 const PORT = process.env.PORT || 3000;
 const CLASSIFIER_URL = process.env.CLASSIFIER_URL;
+// Add this BEFORE your login route to test database connection
+app.get('/test/db', async (req, res) => {
+  try {
+    const status = {
+      server: 'running',
+      database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+      mongoState: mongoose.connection.readyState,
+      env: {
+        hasMongoUri: !!process.env.MONGODB_URI,
+        hasSessionSecret: !!process.env.SESSION_SECRET,
+        nodeEnv: process.env.NODE_ENV
+      }
+    };
+    
+    // Try to count users
+    try {
+      status.userCount = await User.countDocuments();
+    } catch (e) {
+      status.userError = e.message;
+    }
+    
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
+// Add a simple test route
+app.get('/test', (req, res) => {
+  res.json({ status: 'Server is running' });
+});
 // MongoDB connection with retry logic
 const connectWithRetry = () => {
   mongoose.connect(process.env.MONGODB_URI, {
