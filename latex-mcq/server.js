@@ -75,10 +75,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
-// Trust proxy BEFORE session middleware
-if (process.env.NODE_ENV === 'production') {
-  app.set('trust proxy', 1);
-}
+
 
 // SINGLE Session configuration
 app.use(session({
@@ -101,13 +98,67 @@ app.use(session({
 }));
 
 // Health check endpoint for Render
+// Health check endpoint with better error handling
 app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'healthy', 
-    service: 'mcq-latex-web',
-    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
-  });
+  try {
+    res.status(200).json({ 
+      status: 'healthy', 
+      service: 'mcq-latex-web',
+      mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+      sessionStore: !!sessionConfig.store ? 'mongodb' : 'memory'
+    });
+  } catch (error) {
+    console.error('Health check error:', error);
+    res.status(200).json({ 
+      status: 'healthy with errors', 
+      service: 'mcq-latex-web',
+      error: error.message
+    });
+  }
 });
+// Remove any duplicate session configurations and use only this one
+// Trust proxy BEFORE session middleware
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
+// Create MongoStore instance separately to catch errors
+let sessionStore;
+try {
+  sessionStore = MongoStore.create({
+    mongoUrl: process.env.MONGODB_URI,
+    touchAfter: 24 * 3600, // lazy session update
+    crypto: {
+      secret: process.env.SESSION_SECRET || 'fallback-secret'
+    }
+  });
+} catch (error) {
+  console.error('MongoStore creation error:', error);
+  // Fallback to memory store if MongoStore fails
+  sessionStore = null;
+}
+
+// Session configuration with error handling
+const sessionConfig = {
+  secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: 'lax',
+    secure: false // Keep false for now to avoid HTTPS issues
+  }
+};
+
+// Only add store if successfully created
+if (sessionStore) {
+  sessionConfig.store = sessionStore;
+} else {
+  console.warn('Using memory store for sessions - not recommended for production');
+}
+
+app.use(session(sessionConfig));
 
 // Root endpoint
 app.get('/api', (req, res) => {
@@ -1362,7 +1413,22 @@ app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
   res.status(500).json({ error: 'Internal server error' });
 });
-
+// Debug route to check users (remove this in production)
+app.get('/debug/users', async (req, res) => {
+  try {
+    const users = await User.find({}, 'username email role').limit(10);
+    res.json({
+      count: users.length,
+      users: users.map(u => ({
+        username: u.username,
+        email: u.email,
+        role: u.role
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server started on port ${PORT}`);
