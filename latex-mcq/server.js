@@ -23,7 +23,70 @@ const app = express();
 // Get port from environment variable (Render sets this)
 const PORT = process.env.PORT || 3000;
 const CLASSIFIER_URL = process.env.CLASSIFIER_URL;
-// Add this BEFORE your login route to test database connection
+
+// MongoDB connection with retry logic
+const connectWithRetry = () => {
+  mongoose.connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+  }).then(() => {
+    console.log('✅ Connected to MongoDB Atlas');
+  }).catch(err => {
+    console.error('❌ MongoDB connection error:', err.message);
+    console.log('Retrying in 5 seconds...');
+    setTimeout(connectWithRetry, 5000);
+  });
+};
+
+connectWithRetry();
+
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static('public'));
+  
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
+
+// SINGLE Session configuration
+let sessionStore;
+try {
+  sessionStore = MongoStore.create({
+    mongoUrl: process.env.MONGODB_URI,
+    touchAfter: 24 * 3600, // lazy session update
+    crypto: {
+      secret: process.env.SESSION_SECRET || 'your-secret-key-change-this'
+    }
+  });
+} catch (error) {
+  console.error('MongoStore creation error:', error);
+  sessionStore = null;
+}
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGODB_URI,
+    touchAfter: 24 * 3600,
+    crypto: {
+      secret: process.env.SESSION_SECRET || 'your-secret-key-change-this'
+    }
+  }),
+  cookie: {
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: process.env.NODE_ENV === 'production'
+  }
+}));
+app.get('/test', (req, res) => {
+  res.json({ status: 'Server is running' });
+});
+// Health check endpoint for Render
 app.get('/test/db', async (req, res) => {
   try {
     const status = {
@@ -50,62 +113,15 @@ app.get('/test/db', async (req, res) => {
   }
 });
 
-// Add a simple test route
-app.get('/test', (req, res) => {
-  res.json({ status: 'Server is running' });
-});
-// MongoDB connection with retry logic
-const connectWithRetry = () => {
-  mongoose.connect(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-  }).then(() => {
-    console.log('✅ Connected to MongoDB Atlas');
-  }).catch(err => {
-    console.error('❌ MongoDB connection error:', err.message);
-    console.log('Retrying in 5 seconds...');
-    setTimeout(connectWithRetry, 5000);
-  });
-};
-
-connectWithRetry();
-
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static('public'));
-
-
-
-// SINGLE Session configuration
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
-  resave: false,
-  saveUninitialized: false,
-  store: MongoStore.create({
-    mongoUrl: process.env.MONGODB_URI,
-    touchAfter: 24 * 3600,
-    crypto: {
-      secret: process.env.SESSION_SECRET || 'your-secret-key-change-this'
-    }
-  }),
-  cookie: {
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    secure: process.env.NODE_ENV === 'production'
-  }
-}));
-
-// Health check endpoint for Render
 // Health check endpoint with better error handling
+
 app.get('/health', (req, res) => {
   try {
     res.status(200).json({ 
       status: 'healthy', 
       service: 'mcq-latex-web',
       mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-      sessionStore: !!sessionConfig.store ? 'mongodb' : 'memory'
+      sessionStore: sessionStore ? 'mongodb' : 'memory'
     });
   } catch (error) {
     console.error('Health check error:', error);
@@ -116,27 +132,22 @@ app.get('/health', (req, res) => {
     });
   }
 });
-// Remove any duplicate session configurations and use only this one
-// Trust proxy BEFORE session middleware
-if (process.env.NODE_ENV === 'production') {
-  app.set('trust proxy', 1);
-}
-
-// Create MongoStore instance separately to catch errors
-let sessionStore;
-try {
-  sessionStore = MongoStore.create({
-    mongoUrl: process.env.MONGODB_URI,
-    touchAfter: 24 * 3600, // lazy session update
-    crypto: {
-      secret: process.env.SESSION_SECRET || 'fallback-secret'
+app.get('/api', (req, res) => {
+  res.json({ 
+    message: 'MCQ LaTeX Web Service', 
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      auth: '/auth/status',
+      questions: '/questions'
     }
   });
-} catch (error) {
-  console.error('MongoStore creation error:', error);
-  // Fallback to memory store if MongoStore fails
-  sessionStore = null;
-}
+});
+// Remove any duplicate session configurations and use only this one
+// Trust proxy BEFORE session middleware
+
+// Create MongoStore instance separately to catch errors
+
 
 // Session configuration with error handling
 const sessionConfig = {
@@ -174,6 +185,23 @@ app.get('/api', (req, res) => {
 });
 
 // Middleware to check authentication
+
+app.get('/debug/users', async (req, res) => {
+  try {
+    const users = await User.find({}, 'username email role').limit(10);
+    res.json({
+      count: users.length,
+      users: users.map(u => ({
+        username: u.username,
+        email: u.email,
+        role: u.role
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+// Middleware to check super user role
 const requireAuth = (req, res, next) => {
   if (req.session.userId) {
     next();
@@ -181,8 +209,6 @@ const requireAuth = (req, res, next) => {
     res.status(401).json({ error: 'Authentication required' });
   }
 };
-
-// Middleware to check super user role
 const requireSuperUser = (req, res, next) => {
   if (req.session.userId && (req.session.userRole === 'superuser' || req.session.userRole === 'supremeuser')) {
     next();
@@ -1428,6 +1454,10 @@ app.get('/debug/users', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error' });
 });
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
