@@ -586,28 +586,64 @@ async function updateQuestionNumber() {
     // Update the window.onload function
 window.onload = async () => {
   try {
+    // Check authentication status
     console.log('Checking authentication...');
     
+    // Send GET request to /auth/status endpoint
     const response = await fetch('/auth/status', {
-      credentials: 'same-origin' // Important!
+      credentials: 'same-origin' // Include credentials (cookies) in the request
     });
     
+    // Check if the response is OK (200-299)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    // Parse JSON response
     const data = await response.json();
     console.log('Auth status:', data);
     
+    // Check if user is authenticated
     if (!data.authenticated) {
       console.log('Not authenticated, redirecting to login');
+      // Redirect to login page
       window.location.href = '/login.html';
       return;
     }
     
+    // Store current user data
     currentUser = data.user;
     console.log('User authenticated:', currentUser);
+    
+    // Update user interface based on current user's role
     updateUserInterface();
     
-    // Rest of your initialization code...
+    // Add event listener to logout button
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async () => {
+        try {
+          // Send POST request to /logout endpoint
+          const logoutResponse = await fetch('/logout', {
+            method: 'POST'
+          });
+          
+          // Check if logout was successful
+          if (logoutResponse.ok) {
+            // Redirect to login page after logout
+            window.location.href = '/login.html';
+          } else {
+            console.error('Logout failed:', logoutResponse.status);
+          }
+        } catch (error) {
+          console.error('Logout failed:', error);
+        }
+      });
+    }
   } catch (error) {
+    // Handle any errors that occur during authentication check
     console.error('Auth check error:', error);
+    // Redirect to login page if error occurs
     window.location.href = '/login.html';
   }
 };
