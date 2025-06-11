@@ -346,12 +346,12 @@
     let editMode = false;
     let editingQuestionId = null;
     let wasAutoClassified = false;
-    
+    // Add this at the very top with other variables
 let previewTimeout;
-   
+    // Add this at the very top with other variables
 
     
-   
+    // Global variables for search and filter
     let allQuestions = [];
     let filteredQuestions = [];
     let currentSearchTerm = '';
@@ -367,13 +367,16 @@ let previewTimeout;
     
     const CLASSIFIER_API_URL = 'https://mcq-classifier-g1z9.onrender.com';
     
-    
+    // Topic arrays
     const physicsTopics = ["Physical World and Measurement", "Kinematics", "Laws of Motion", "Work, Energy and Power", "Rotational Motion", "Gravitation", "Properties of Solids and Liquids", "Thermodynamics", "Kinetic Theory of Gases", "Oscillations and Waves", "Electrostatics", "Current Electricity", "Magnetic Effects of Current and Magnetism", "Electromagnetic Induction and Alternating Currents", "Electromagnetic Waves", "Optics", "Dual Nature of Matter and Radiation", "Atoms and Nuclei", "Electronic Devices", "Communication Systems"];
 
     const chemistryTopics = ["Some Basic Concepts of Chemistry (Mole Concept)", "Atomic Structure", "Chemical Bonding and Molecular Structure", "Chemical Thermodynamics", "Solutions", "Equilibrium", "Redox Reactions and Electrochemistry", "Chemical Kinetics", "Surface Chemistry", "Classification of Elements and Periodicity in Properties", "General Principles and Processes of Isolation of Metals", "Hydrogen", "S-block elements (Alkali and Alkaline earth metals)", "P-block elements", "D and F block elements", "Coordination Compounds", "Environmental Chemistry", "Organic Chemistry – Basic Principles and Techniques", "Hydrocarbons", "Haloalkanes and Haloarenes", "Alcohols, Phenols, and Ethers", "Aldehydes, Ketones, and Carboxylic Acids", "Organic Compounds Containing Nitrogen", "Polymers", "Biomolecules", "Solid States"];
 
     const mathsTopics = ["Sets, Relations and Functions", "Complex Numbers and Quadratic Equations", "Matrices and Determinants", "Permutations and Combinations", "Mathematical Induction", "Binomial Theorem", "Sequences and Series", "Limits, Continuity and Differentiability", "Integral Calculus", "Differential Equations", "Coordinate Geometry", "3D Geometry", "Vector Algebra", "Statistics and Probability", "Trigonometry", "Mathematical Reasoning" , "Application of Derivatives"];
+    // Add these variables at the top with other global variables
 let questionCountCache = {};
+
+// Function to generate unique serial number
 async function generateUniqueSerialNumber() {
   const pyqType = document.getElementById('pyqType').value;
   if (pyqType !== 'JEE MAIN PYQ') return null;
@@ -393,9 +396,10 @@ async function generateUniqueSerialNumber() {
     return serial;
   } catch (error) {
     console.error('Serial generation error:', error);
-    return `FALLBACK-${Date.now()}`; 
+    return `FALLBACK-${Date.now()}`; // fallback in extreme case
   }
 }
+// Function to render solution LaTeX
 function renderSolutionLatex() {
   clearTimeout(previewTimeout);
 
@@ -420,19 +424,19 @@ function renderSolutionLatex() {
     });
   }, 500);
 }
-
+// Function to update question number field
 async function updateQuestionNumber() {
   const pyqType = document.getElementById('pyqType').value;
   const questionNoInput = document.getElementById('questionNo');
   
   if (pyqType === 'JEE MAIN PYQ') {
-   
+    // Check if all required fields are filled
     const year = document.getElementById('year').value;
     const examDate = document.getElementById('examDate').value;
     const shiftRadio = document.querySelector('input[name="shift"]:checked');
     
     if (year && examDate && shiftRadio) {
-   
+      // Generate serial number
       const serialNumber = await generateUniqueSerialNumber();
       
       if (serialNumber) {
@@ -441,19 +445,19 @@ async function updateQuestionNumber() {
         questionNoInput.style.backgroundColor = '#f0f0f0';
         questionNoInput.style.cursor = 'not-allowed';
         
-        
+        // Add visual feedback
         questionNoInput.style.borderColor = '#4caf50';
         setTimeout(() => {
           questionNoInput.style.borderColor = '';
         }, 2000);
       }
     } else {
-     
+      // Clear the field if required fields are not complete
       questionNoInput.value = '';
       questionNoInput.placeholder = 'Complete PYQ details to generate';
     }
   } else {
-   
+    // For non-PYQ questions, allow manual input
     questionNoInput.value = '';
     questionNoInput.readOnly = false;
     questionNoInput.style.backgroundColor = '';
@@ -461,7 +465,7 @@ async function updateQuestionNumber() {
     questionNoInput.placeholder = 'e.g., Q1, 1, A-1, etc.';
   }
 }
-   
+    // Function to edit a question (superuser only)
     async function editQuestion(questionId) {
       if (currentUser.role !== 'superuser') {
         alert('Only superusers can edit questions.');
@@ -476,15 +480,15 @@ async function updateQuestionNumber() {
         
         const question = await response.json();
         
-       
+        // Enable edit mode
         editMode = true;
         editingQuestionId = questionId;
         
-       
+        // Update form title and button
         document.querySelector('h1').textContent = 'Edit MCQ (LaTeX Supported)';
         document.querySelector('button[type="submit"]').textContent = 'Update Question';
         
-      
+        // Populate form with existing data
         document.getElementById('questionNo').value = question.questionNo;
         document.getElementById('question').value = question.question;
         document.getElementById('option1').value = question.options[0] || '';
@@ -495,7 +499,7 @@ async function updateQuestionNumber() {
         document.getElementById('subject').value = question.subject;
         document.getElementById('solution').value = question.solution || '';
         renderSolutionLatex();
-       
+        // Update topics based on subject
         updateTopics();
         setTimeout(() => {
           document.getElementById('topic').value = question.topic;
@@ -504,7 +508,7 @@ async function updateQuestionNumber() {
         document.getElementById('difficulty').value = question.difficulty;
         document.getElementById('pyqType').value = question.pyqType;
         
-    
+        // Handle PYQ details
         if (question.pyqType === 'JEE MAIN PYQ') {
           togglePyqFields();
           document.getElementById('year').value = question.year;
@@ -525,13 +529,13 @@ async function updateQuestionNumber() {
           }, 200);
         }
         
-        
+        // Render LaTeX previews
         renderLatex();
         for (let i = 1; i <= 4; i++) {
           renderOptionLatex(i);
         }
         
-        
+        // Scroll to form
         document.querySelector('h1').scrollIntoView({ behavior: 'smooth' });
         
       } catch (error) {
@@ -540,7 +544,7 @@ async function updateQuestionNumber() {
       }
     }
 
-    
+    // Function to cancel edit mode
     function cancelEdit() {
       editMode = false;
       editingQuestionId = null;
@@ -549,7 +553,7 @@ async function updateQuestionNumber() {
       clearForm();
     }
 
-    
+    // Function to delete a question (superuser only)
     async function deleteQuestion(questionId) {
       if (currentUser.role !== 'superuser') {
         alert('Only superusers can delete questions.');
@@ -567,7 +571,7 @@ async function updateQuestionNumber() {
 
         if (response.ok) {
           alert('Question deleted successfully!');
-          loadQuestions(); 
+          loadQuestions(); // Reload the questions list
         } else {
           const errorText = await response.text();
           alert('Failed to delete question: ' + errorText);
@@ -578,14 +582,16 @@ async function updateQuestionNumber() {
       }
     }
 
-    
-    
+    // Check authentication on page load
+    // Update the window.onload function
 window.onload = async () => {
   try {
     console.log('Checking authentication...');
+    
     const response = await fetch('/auth/status', {
-      credentials: 'same-origin'
+      credentials: 'same-origin' // Important!
     });
+    
     const data = await response.json();
     console.log('Auth status:', data);
     
@@ -597,46 +603,48 @@ window.onload = async () => {
     
     currentUser = data.user;
     console.log('User authenticated:', currentUser);
-    
     updateUserInterface();
     
-    // Load years immediately after authentication
-    await loadYears();
-    
+    // Rest of your initialization code...
   } catch (error) {
     console.error('Auth check error:', error);
     window.location.href = '/login.html';
   }
 };
- function updateUserInterface() {
-  document.getElementById('welcomeMessage').textContent = `Welcome, ${currentUser.username}!`;
-  const roleElement = document.getElementById('userRole');
-  
-  if (currentUser.role === 'supremeuser') {
-    roleElement.textContent = 'Supreme User';
-    roleElement.className = 'role-badge supremeuser';
-    document.getElementById('supremeToggleBtn').style.display = 'block';
-    document.getElementById('adminToggleBtn').style.display = 'block';
-    // Load approval stats asynchronously
-    loadApprovalStats().catch(console.error);
-  } else if (currentUser.role === 'superuser') {
-    roleElement.textContent = 'Super User';
-    roleElement.className = 'role-badge superuser';
-    document.getElementById('adminToggleBtn').style.display = 'block';
-  } else {
-    roleElement.textContent = 'User';
-    roleElement.className = 'role-badge user';
-  }
-  
-  const questionsTitle = document.getElementById('questionsTitle');
-  questionsTitle.textContent = (currentUser.role === 'superuser' || currentUser.role === 'supremeuser') 
-    ? 'All Questions' 
-    : 'Your Questions';
+    function updateUserInterface() {
+    document.getElementById('welcomeMessage').textContent = `Welcome, ${currentUser.username}!`;
+    const roleElement = document.getElementById('userRole');
+    
+    if (currentUser.role === 'supremeuser') {
+        roleElement.textContent = 'Supreme User';
+        roleElement.className = 'role-badge supremeuser';
+        document.getElementById('supremeToggleBtn').style.display = 'block';
+        // Also show admin features for supreme users
+        document.getElementById('adminToggleBtn').style.display = 'block';
+        loadApprovalStats();
+    } else if (currentUser.role === 'superuser') {
+        roleElement.textContent = 'Super User';
+        roleElement.className = 'role-badge superuser';
+        document.getElementById('adminToggleBtn').style.display = 'block';
+    } else {
+        roleElement.textContent = 'User';
+        roleElement.className = 'role-badge user';
+    }
+    
+    const questionsTitle = document.getElementById('questionsTitle');
+    questionsTitle.textContent = (currentUser.role === 'superuser' || currentUser.role === 'supremeuser') 
+        ? 'All Questions' : 'Your Questions';
+        
+    // For regular users, still load basic years for the PYQ dropdown
+    if (currentUser.role === 'user') {
+        const defaultYears = [2025, 2024, 2023, 2022, 2021];
+        updateMainPyqYearDropdown(defaultYears);
+    }
 }
-
+// Supreme User Functions (Add these before updateUserInterface)
 let selectedPendingQuestions = new Set();
 
-
+// Load approval statistics
 async function loadApprovalStats() {
     try {
         const response = await fetch('/approval-stats');
@@ -647,7 +655,7 @@ async function loadApprovalStats() {
         
         const stats = await response.json();
         
-        
+        // Only update if elements exist
         if (document.getElementById('pendingCount')) {
             document.getElementById('pendingCount').textContent = stats.pending || 0;
         }
@@ -662,6 +670,7 @@ async function loadApprovalStats() {
     }
 }
 
+// Toggle supreme user section
 function toggleSupremeSection() {
     const supremeSection = document.getElementById('supremeUserSection');
     const toggleBtn = document.getElementById('supremeToggleBtn');
@@ -682,6 +691,7 @@ function toggleSupremeSection() {
     }
 }
 
+// Load pending questions
 async function loadPendingQuestions() {
     try {
         const response = await fetch('/pending-questions');
@@ -698,6 +708,7 @@ async function loadPendingQuestions() {
     }
 }
 
+// Display pending questions
 function displayPendingQuestions(questions) {
     const container = document.getElementById('pendingQuestionsList');
     if (!container) return;
@@ -762,12 +773,14 @@ function displayPendingQuestions(questions) {
         `;
     }).join('');
     
+    // Re-render MathJax
     if (window.MathJax) {
         MathJax.typesetClear([container]);
         MathJax.typesetPromise([container]).catch(err => console.error('MathJax error:', err));
     }
 }
 
+// Toggle question selection
 function toggleQuestionSelection(questionId) {
     if (selectedPendingQuestions.has(questionId)) {
         selectedPendingQuestions.delete(questionId);
@@ -776,6 +789,7 @@ function toggleQuestionSelection(questionId) {
     }
 }
 
+// Select all pending questions
 function selectAllPending() {
     const checkboxes = document.querySelectorAll('#pendingQuestionsList input[type="checkbox"]');
     const allChecked = Array.from(checkboxes).every(cb => cb.checked);
@@ -790,6 +804,7 @@ function selectAllPending() {
     });
 }
 
+// Approve single question
 async function approveQuestion(questionId) {
     if (!confirm('Are you sure you want to approve this question?')) return;
     
@@ -803,6 +818,7 @@ async function approveQuestion(questionId) {
         const result = await response.json();
         alert(result.message);
         
+        // Refresh lists
         loadPendingQuestions();
         loadApprovalStats();
         if (typeof loadQuestions === 'function') loadQuestions();
@@ -812,6 +828,7 @@ async function approveQuestion(questionId) {
     }
 }
 
+// Show reject dialog
 function showRejectDialog(questionId) {
     const reason = prompt('Please provide a reason for rejection:');
     if (reason !== null) {
@@ -819,6 +836,7 @@ function showRejectDialog(questionId) {
     }
 }
 
+// Reject question
 async function rejectQuestion(questionId, reason) {
     try {
         const response = await fetch(`/reject-question/${questionId}`, {
@@ -832,6 +850,7 @@ async function rejectQuestion(questionId, reason) {
         const result = await response.json();
         alert(result.message);
         
+        // Refresh lists
         loadPendingQuestions();
         loadApprovalStats();
     } catch (error) {
@@ -840,6 +859,7 @@ async function rejectQuestion(questionId, reason) {
     }
 }
 
+// Bulk approve selected questions
 async function bulkApprove() {
     if (selectedPendingQuestions.size === 0) {
         alert('Please select questions to approve');
@@ -862,8 +882,10 @@ async function bulkApprove() {
         const result = await response.json();
         alert(result.message);
         
+        // Clear selections
         selectedPendingQuestions.clear();
         
+        // Refresh lists
         loadPendingQuestions();
         loadApprovalStats();
         if (typeof loadQuestions === 'function') loadQuestions();
@@ -873,6 +895,7 @@ async function bulkApprove() {
     }
 }
 
+// Preview question in modal
 function previewQuestion(questionId) {
     const questionCard = document.querySelector(`#pending-${questionId}`)?.closest('.pending-question-card');
     if (questionCard) {
@@ -891,6 +914,7 @@ function previewQuestion(questionId) {
         `;
         document.body.appendChild(modal);
         
+        // Re-render MathJax in modal
         if (window.MathJax) {
             MathJax.typesetClear([modal]);
             MathJax.typesetPromise([modal]).catch(err => console.error('MathJax error:', err));
@@ -898,6 +922,7 @@ function previewQuestion(questionId) {
     }
 }
 
+// Refresh pending questions
 function refreshPendingQuestions() {
     selectedPendingQuestions.clear();
     loadPendingQuestions();
@@ -911,6 +936,7 @@ function updateUserInterface() {
         roleElement.textContent = 'Supreme User';
         roleElement.className = 'role-badge supremeuser';
         document.getElementById('supremeToggleBtn').style.display = 'block';
+        // Also show admin features for supreme users
         document.getElementById('adminToggleBtn').style.display = 'block';
         loadApprovalStats();
     } else if (currentUser.role === 'superuser') {
@@ -926,6 +952,7 @@ function updateUserInterface() {
     questionsTitle.textContent = (currentUser.role === 'superuser' || currentUser.role === 'supremeuser') 
         ? 'All Questions' : 'Your Questions';
         
+    // For regular users, still load basic years for the PYQ dropdown
     if (currentUser.role === 'user') {
         const defaultYears = [2025, 2024, 2023, 2022, 2021];
         updateMainPyqYearDropdown(defaultYears);
@@ -933,44 +960,42 @@ function updateUserInterface() {
 }
 
 
-async function populateExamDates() {
-  const year = document.getElementById('year').value;
-  const examDateSelect = document.getElementById('examDate');
-  examDateSelect.innerHTML = '<option value="">-- Select Exam Date --</option>';
-  
-  if (!year) {
-    examDateSelect.required = false;
+    // Populate exam dates based on selected year
+ async function populateExamDates() {
+    const year = document.getElementById('year').value;
+    const examDateSelect = document.getElementById('examDate');
+    
+    // Clear existing options
+    examDateSelect.innerHTML = '<option value="">-- Select Exam Date --</option>';
+    
+    if (!year) {
+        examDateSelect.required = false;
+        updateQuestionNumber();
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/public/exam-dates/${year}`);
+        if (!response.ok) throw new Error('Failed to load exam dates');
+        
+        const examDates = await response.json();
+        examDates.forEach(dateObj => {
+            const option = document.createElement('option');
+            option.value = dateObj.date;
+            option.textContent = dateObj.label;
+            examDateSelect.appendChild(option);
+        });
+        
+        examDateSelect.required = true;
+    } catch (err) {
+        console.error('Error loading exam dates:', err);
+        examDateSelect.required = false;
+    }
+    
     updateQuestionNumber();
-    return;
-  }
-  
-  try {
-    const response = await fetch(`/public/exam-dates/${year}`);
-    if (!response.ok) throw new Error('Failed to load exam dates');
-    
-    const examDates = await response.json();
-    examDates.forEach(dateObj => {
-      const option = document.createElement('option');
-      option.value = dateObj.date;
-      option.textContent = dateObj.label;
-      examDateSelect.appendChild(option);
-    });
-    
-    examDateSelect.required = true;
-  } catch (err) {
-    console.error('Error loading exam dates:', err);
-    examDateSelect.required = false;
-    // Add a message option
-    const option = document.createElement('option');
-    option.value = "";
-    option.textContent = "-- Error loading dates --";
-    option.disabled = true;
-    examDateSelect.appendChild(option);
-  }
-  
-  updateQuestionNumber();
 }
 
+       // Toggle PYQ fields based on selection
     function togglePyqFields() {
   const pyqType = document.getElementById('pyqType').value;
   const pyqDetails = document.getElementById('pyqDetails');
@@ -982,11 +1007,13 @@ async function populateExamDates() {
     pyqDetails.style.display = 'none';
     yearSelect.required = false;
     examDateSelect.required = false;
+    // Clear radio buttons
     document.querySelectorAll('input[name="shift"]').forEach(radio => {
       radio.checked = false;
       radio.required = false;
     });
     
+    // Reset question number field for manual input
     questionNoInput.value = '';
     questionNoInput.readOnly = false;
     questionNoInput.style.backgroundColor = '';
@@ -999,9 +1026,11 @@ async function populateExamDates() {
       radio.required = true;
     });
     
+    // Update question number when PYQ is selected
     updateQuestionNumber();
   }
 }
+    // Logout functionality
     document.getElementById('logoutBtn').addEventListener('click', async () => {
       try {
         await fetch('/logout', { method: 'POST' });
@@ -1025,15 +1054,18 @@ async function populateExamDates() {
       return;
     }
 
+    // Process LaTeX content
     let processed = processLatexContent(input);
     preview.innerHTML = processed;
 
+    // Render with MathJax
     MathJax.typesetClear([preview]);
     MathJax.typesetPromise([preview]).catch(err => {
       preview.innerHTML = '<span style="color:red;">LaTeX rendering error.</span>';
       console.error('MathJax error:', err);
     });
 
+    // Auto-classification logic
     if (input.length > 30 && !editMode) {
       const difficultyInput = document.getElementById('difficulty');
       const difficultyStatus = document.getElementById('classificationStatus');
@@ -1078,15 +1110,19 @@ async function populateExamDates() {
 }
 
 
+// Unified LaTeX processing function
 function processLatexContent(input, isSolution = false) {
+  // First, escape HTML to prevent XSS
   let escaped = input.replace(/&/g, '&amp;')
                      .replace(/</g, '&lt;')
                      .replace(/>/g, '&gt;');
   
   if (isSolution) {
+    // Handle newlines for solution preview
     escaped = escaped.replace(/\n/g, '<br>');
   }
   
+  // Handle various LaTeX formats
   escaped = escaped.replace(/\$\$([\s\S]+?)\$\$/g, (_, match) => `\$$${match.trim().replace(/\n/g, ' ')}\$$`);
   escaped = escaped.replace(/\\$$(.+?)\\$$/gs, (_, match) => `\$$${match.trim().replace(/\n/g, ' ')}\$$`);
   escaped = escaped.replace(/(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)/gs, (_, match) => `\$$${match.trim().replace(/\n/g, ' ')}\$$`);
@@ -1104,9 +1140,11 @@ function renderOptionLatex(num) {
     return;
   }
 
+  // Process LaTeX content
   let processed = processLatexContent(input);
   preview.innerHTML = processed;
 
+  // Render with MathJax
   MathJax.typesetClear([preview]);
   MathJax.typesetPromise([preview]).catch(err => {
     preview.innerHTML = '<span style="color:red;">LaTeX rendering error.</span>';
@@ -1114,6 +1152,7 @@ function renderOptionLatex(num) {
   });
 }
 
+// Unified LaTeX processing function
 function showSuccess() {
       const msg = document.getElementById("successMessage");
       msg.textContent = "✅ Question submitted successfully!";
@@ -1123,6 +1162,7 @@ function showSuccess() {
     }
 
    function clearForm() {
+    // Store PYQ values before clearing if it's a JEE MAIN PYQ
     const pyqType = document.getElementById('pyqType').value;
     let preservedValues = null;
     
@@ -1135,33 +1175,43 @@ function showSuccess() {
         };
     }
     
+    // Reset the form
     document.getElementById('mcqForm').reset();
     document.getElementById('preview').innerHTML = '';
     
+    // Clear option previews
     for (let i = 1; i <= 4; i++) {
         document.getElementById(`preview-option${i}`).innerHTML = '';
     }
     document.getElementById('solution-preview').innerHTML = '<em style="color: #777;">Solution preview will appear here...</em>';
     
+    // Reset difficulty field
     document.getElementById('difficulty').value = '';
     document.getElementById('difficulty').placeholder = 'Will be auto-classified...';
     if (document.getElementById('classificationStatus')) {
         document.getElementById('classificationStatus').textContent = '';
     }
     
+    // Restore PYQ values if they were preserved
     if (preservedValues) {
+        // Set PYQ type back
         document.getElementById('pyqType').value = preservedValues.pyqType;
         
+        // Show PYQ details section
         document.getElementById('pyqDetails').style.display = 'block';
         
+        // Restore year
         if (preservedValues.year) {
             document.getElementById('year').value = preservedValues.year;
             
+            // Reload exam dates for the preserved year
             populateExamDates().then(() => {
+                // Restore exam date after dates are loaded
                 if (preservedValues.examDate) {
                     document.getElementById('examDate').value = preservedValues.examDate;
                 }
                 
+                // Restore shift
                 if (preservedValues.shift) {
                     const shiftRadio = document.querySelector(`input[name="shift"][value="${preservedValues.shift}"]`);
                     if (shiftRadio) {
@@ -1169,13 +1219,16 @@ function showSuccess() {
                     }
                 }
                 
+                // Update question number based on restored values
                 updateQuestionNumber();
             });
         }
     } else {
+        // If not PYQ, hide PYQ details and clear as normal
         document.getElementById('pyqDetails').style.display = 'none';
         document.getElementById('examDate').innerHTML = '<option value="">-- Select Exam Date --</option>';
         
+        // Reset question number field
         const questionNoInput = document.getElementById('questionNo');
         questionNoInput.value = '';
         questionNoInput.readOnly = false;
@@ -1184,6 +1237,7 @@ function showSuccess() {
         questionNoInput.placeholder = 'e.g., Q1, 1, A-1, etc.';
     }
     
+    // Hide cancel button if in edit mode
     const cancelBtn = document.getElementById('cancelEditBtn');
     if (cancelBtn) {
         cancelBtn.style.display = editMode ? 'inline-block' : 'none';
@@ -1214,6 +1268,7 @@ function showSuccess() {
 
     const form = document.getElementById('mcqForm');
 
+    // Form submission handler
     form.addEventListener('submit', async function(event) {
     event.preventDefault();
 
@@ -1239,6 +1294,7 @@ function showSuccess() {
         autoClassified: wasAutoClassified
     };
 
+    // Validate difficulty
     if (!data.difficulty || !['easy', 'medium', 'hard'].includes(data.difficulty)) {
         alert('Please wait for difficulty classification or enter manually (easy/medium/hard)');
         return;
@@ -1249,6 +1305,7 @@ function showSuccess() {
         let successMessage;
 
         if (editMode && editingQuestionId) {
+            // Update existing question
             response = await fetch(`/questions/${editingQuestionId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -1256,6 +1313,7 @@ function showSuccess() {
             });
             successMessage = 'Question updated successfully!';
         } else {
+            // Create new question
             response = await fetch('/submit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1267,13 +1325,16 @@ function showSuccess() {
         if (response.ok) {
             alert(successMessage);
             
+            // Changed: Use conditional clearing based on edit mode
             if (editMode) {
+                // In edit mode, use cancelEdit to fully reset
                 cancelEdit();
             } else {
+                // In normal mode, use clearForm which preserves PYQ fields
                 clearForm();
             }
             
-            loadQuestions(); 
+            loadQuestions(); // Reload questions to show updated data
         } else {
             const errorText = await response.text();
             alert('Failed to save question: ' + errorText);
@@ -1286,6 +1347,7 @@ function showSuccess() {
 function initializeFilters() {
   console.log('Initializing filters...');
   
+  // Show creator filter for superusers
   if (currentUser && currentUser.role === 'superuser') {
     const creatorFilterGroup = document.getElementById('creatorFilterGroup');
     if (creatorFilterGroup) {
@@ -1294,6 +1356,7 @@ function initializeFilters() {
     loadCreators();
   }
   
+  // Load years for filter
   loadFilterYears();
 }
 function loadCreators() {
@@ -1315,7 +1378,8 @@ function loadCreators() {
   }
 }
 
-   
+    // New loadQuestions function that integrates with search/filter
+    // New loadQuestions function that integrates with search/filter
 async function loadQuestions() {
   try {
     console.log('Starting to load questions...');
@@ -1337,6 +1401,7 @@ async function loadQuestions() {
     
     allQuestions = data;
     
+    // Show search and filter container
     const searchFilterContainer = document.getElementById('searchFilterContainer');
     if (searchFilterContainer) {
       searchFilterContainer.style.display = 'flex';
@@ -1351,8 +1416,10 @@ async function loadQuestions() {
       return;
     }
 
+    // Initialize filters on first load
     initializeFilters();
     
+    // Display all questions initially
     filteredQuestions = [...allQuestions];
     displayFilteredQuestions();
     updateResultsSummary();
@@ -1361,15 +1428,18 @@ async function loadQuestions() {
     console.error('Detailed error loading questions:', error);
     console.error('Error stack:', error.stack);
     
+    // More specific error message
     const errorMessage = error.message || 'Unknown error occurred';
     alert(`Error loading questions: ${errorMessage}. Please check the console for details.`);
     
+    // Still try to show the question list container
     const questionList = document.getElementById('questionList');
     if (questionList) {
       questionList.innerHTML = `<p style="color: red;">Error loading questions: ${errorMessage}</p>`;
     }
   }
 }
+    // Load years for filter dropdown
     function loadFilterYears() {
       const years = [...new Set(allQuestions
         .filter(q => q.year)
@@ -1389,6 +1459,7 @@ async function loadQuestions() {
       }
     }
 
+    // Update topic filter based on selected subject
     function updateTopicFilter() {
       const selectedSubject = document.getElementById('filterSubject').value;
       const topicSelect = document.getElementById('filterTopic');
@@ -1412,6 +1483,7 @@ async function loadQuestions() {
       });
     }
 
+    // Toggle filter section visibility
     function toggleFilters() {
       const filterSection = document.getElementById('filterSection');
       const toggleIcon = document.getElementById('filterToggleIcon');
@@ -1425,6 +1497,7 @@ async function loadQuestions() {
       }
     }
 
+    // Search functionality
     function searchQuestions() {
       const searchInput = document.getElementById('searchInput');
       if (searchInput) {
@@ -1434,6 +1507,7 @@ async function loadQuestions() {
       }
     }
 
+    // Clear search
     function clearSearch() {
       const searchInput = document.getElementById('searchInput');
       if (searchInput) {
@@ -1443,7 +1517,9 @@ async function loadQuestions() {
       }
     }
 
+    // Apply all filters and search
     function applyFilters() {
+      // Get filter values
       activeFilters = {
         subject: document.getElementById('filterSubject')?.value || '',
         topic: document.getElementById('filterTopic')?.value || '',
@@ -1455,8 +1531,10 @@ async function loadQuestions() {
         sortBy: document.getElementById('sortBy')?.value || 'createdAt-desc'
       };
 
+      // Start with all questions
       filteredQuestions = [...allQuestions];
 
+      // Apply filters
       if (activeFilters.subject) {
         filteredQuestions = filteredQuestions.filter(q => q.subject === activeFilters.subject);
       }
@@ -1483,6 +1561,7 @@ async function loadQuestions() {
         );
       }
 
+      // Apply search
       if (currentSearchTerm) {
         filteredQuestions = filteredQuestions.filter(q => {
           const searchableText = [
@@ -1499,6 +1578,7 @@ async function loadQuestions() {
         });
       }
 
+      // Apply sorting
       const [sortField, sortOrder] = activeFilters.sortBy.split('-');
       filteredQuestions.sort((a, b) => {
         let compareValue = 0;
@@ -1519,19 +1599,24 @@ async function loadQuestions() {
         return sortOrder === 'desc' ? -compareValue : compareValue;
       });
 
+      // Update UI
       displayFilteredQuestions();
       updateFilterCount();
       updateResultsSummary();
     }
+    // Highlight search terms in text
 function highlightSearchTerm(text) {
   if (!currentSearchTerm || !text) return text;
   
+  // Escape special regex characters
   const escapedTerm = currentSearchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(`(${escapedTerm})`, 'gi');
   return text.replace(regex, '<span class="search-highlight">$1</span>');
 }
 
-   
+    // Display filtered questions
+    // Display filtered questions
+// Display filtered questions
 const originalDisplayFilteredQuestions = displayFilteredQuestions;
 function displayFilteredQuestions() {
     const list = document.getElementById('questionList');
@@ -1605,8 +1690,10 @@ function displayFilteredQuestions() {
         const classificationBadge = q.autoClassified ? 
             '<span class="badge auto-classified">🤖 Auto-classified</span>' : '';
 
+        // Process question text with LaTeX
         const processedQuestion = processTextForDisplay(q.question);
 
+        // Process options with LaTeX
         const processedOptions = q.options.map((opt, idx) => {
             const processedOpt = processTextForDisplay(opt);
             const isCorrect = idx === q.correctOption;
@@ -1614,6 +1701,7 @@ function displayFilteredQuestions() {
             return `<li data-option="${optionLetter}"${isCorrect ? ' style="font-weight:bold;color:green;"' : ''}>${processedOpt}</li>`;
         }).join('');
 
+        // Process solution if exists
         const processedSolution = q.solution ? processTextForDisplay(q.solution) : '';
 
         div.innerHTML = `
@@ -1646,6 +1734,7 @@ function displayFilteredQuestions() {
         list.appendChild(div);
     });
 
+    // Render MathJax for all questions
     if (window.MathJax) {
         MathJax.typesetClear([list]);
         MathJax.typesetPromise([list]).then(() => {
@@ -1662,23 +1751,31 @@ function displayFilteredQuestions() {
             console.error('MathJax rendering error:', err);
         });
     }
-}
+}// Add this helper function to process LaTeX for display
+// Add this helper function to process LaTeX for display
+// Add this helper function to process LaTeX for display
 function processTextForDisplay(text) {
     if (!text) return '';
     
+    // HTML escape
     let processed = text
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
     
+    // Support newlines in solutions
     processed = processed.replace(/\n/g, '<br>');
     
+    // Process display math - convert to inline for question display
     processed = processed.replace(/\$\$([\s\S]+?)\$\$/g, (_, match) => {
+        // Use single $ for inline rendering in question list
         return `$${match.trim()}$`;
     });
     
+    // Process inline math
     processed = processed.replace(/\$([^\$]+?)\$/g, (_, match) => `\$$${match.trim()}\$$`);
     
+    // Apply search highlighting if needed
     if (currentSearchTerm) {
         const escapedTerm = currentSearchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const regex = new RegExp(`(${escapedTerm})`, 'gi');
@@ -1694,6 +1791,7 @@ function processTextForDisplay(text) {
     
     return processed;
 }   
+ // Update active filter count
     function updateFilterCount() {
       let count = 0;
       
@@ -1715,6 +1813,7 @@ function processTextForDisplay(text) {
       }
     }
 
+    // Update results summary
     function updateResultsSummary() {
       const summaryDiv = document.getElementById('resultsSummary');
       const countSpan = document.getElementById('resultsCount');
@@ -1732,7 +1831,9 @@ function processTextForDisplay(text) {
       }
     }
 
+    // Reset all filters
     function resetFilters() {
+      // Reset form values
       document.getElementById('filterSubject').value = '';
       document.getElementById('filterTopic').value = '';
       document.getElementById('filterDifficulty').value = '';
@@ -1748,51 +1849,52 @@ function processTextForDisplay(text) {
         creatorFilter.value = '';
       }
       
+      // Reset search
       document.getElementById('searchInput').value = '';
       currentSearchTerm = '';
       
+      // Reset topic dropdown
       document.getElementById('filterTopic').innerHTML = '<option value="">All Topics</option>';
       
+      // Apply filters (which will now show all questions)
       applyFilters();
     }
-   async function loadYears() {
-  try {
-    console.log('Loading years...');
-    
-    // Immediately populate with default years while fetching from server
-    const defaultYears = [2025, 2024, 2023, 2022, 2021];
-    updateMainPyqYearDropdown(defaultYears);
-    
-    // Determine which endpoint to use based on user role
-    const endpoint = currentUser && (currentUser.role === 'superuser' || currentUser.role === 'supremeuser') 
-      ? '/admin/years' 
-      : '/public/years';
-    
-    // Fetch years from server with timeout
-    const response = await Promise.race([
-      fetch(endpoint),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout')), 3000)
-      )
-    ]);
-    
-    if (response.ok) {
-      const years = await response.json();
-      console.log('Years received from backend:', years);
-      
-      if (currentUser && (currentUser.role === 'superuser' || currentUser.role === 'supremeuser')) {
-        updateYearDropdowns(years);
-        displayCurrentYears(years);
+        // Function to load years from backend
+    async function loadYears() {
+      try {
+        console.log('Loading years...');
+        
+        // Use appropriate endpoint based on user role
+        const endpoint = currentUser && currentUser.role === 'superuser' 
+          ? '/admin/years' 
+          : '/public/years';
+        
+        const response = await fetch(endpoint);
+        console.log('Response status:', response.status);
+        
+        if (response.ok) {
+          const years = await response.json();
+          console.log('Years received from backend:', years);
+          
+          // Only update admin dropdowns for superusers
+          if (currentUser && currentUser.role === 'superuser') {
+            updateYearDropdowns(years);
+            displayCurrentYears(years);
+          }
+          
+          // Always update main PYQ dropdown
+          updateMainPyqYearDropdown(years);
+        } else {
+          console.error('Failed to load years:', response.status);
+          const defaultYears = [2025, 2024, 2023, 2022, 2021];
+          updateMainPyqYearDropdown(defaultYears);
+        }
+      } catch (error) {
+        console.error('Error loading years:', error);
+        const defaultYears = [2025, 2024, 2023, 2022, 2021];
+        updateMainPyqYearDropdown(defaultYears);
       }
-      updateMainPyqYearDropdown(years);
-    } else {
-      console.error('Failed to load years:', response.status);
     }
-  } catch (error) {
-    console.error('Error loading years:', error);
-    // Keep the default years that were already populated
-  }
-}
 function processSolutionLatex(solution) {
   if (!solution) return '';
   
@@ -1802,23 +1904,30 @@ function processSolutionLatex(solution) {
     .replace(/>/g, '&gt;')
     .replace(/\n/g, '<br>');
   
+  // Process display math
   processed = processed.replace(/\$\$([\s\S]+?)\$\$/g, (_, match) => `\$$${match.trim()}\$$`);
   
+  // Process inline math
   processed = processed.replace(/\$([^\$]+?)\$/g, (_, match) => `\$$${match.trim()}\$$`);
   
   return processed;
 }
+    // Function to update the main PYQ year dropdown
     function updateMainPyqYearDropdown(yearsData) {
       const mainYearSelect = document.getElementById('year');
       
+      // Handle both array and object with years property
       let years = Array.isArray(yearsData) ? yearsData : (yearsData.years || []);
       
       console.log('Updating main PYQ dropdown with years:', years);
       
+      // Store currently selected value
       const currentValue = mainYearSelect.value;
       
+      // Clear existing options
       mainYearSelect.innerHTML = '<option value="">-- Select Year --</option>';
       
+      // Add years to main dropdown (sort in descending order for better UX)
       years.sort((a, b) => b - a).forEach(year => {
         const option = document.createElement('option');
         option.value = year;
@@ -1826,18 +1935,23 @@ function processSolutionLatex(solution) {
         mainYearSelect.appendChild(option);
       });
       
+      // Restore previously selected value if it still exists
       if (currentValue && years.includes(parseInt(currentValue))) {
         mainYearSelect.value = currentValue;
       }
     }
 
+    // Function to update year dropdowns (admin panel only)
     function updateYearDropdowns(yearsData) {
       const dateManagementYear = document.getElementById('dateManagementYear');
       
+      // Handle both array and object with years property
       let years = Array.isArray(yearsData) ? yearsData : (yearsData.years || []);
       
+      // Clear existing options
       dateManagementYear.innerHTML = '<option value="">Select Year</option>';
       
+      // Add years to admin dropdown
       years.sort((a, b) => b - a).forEach(year => {
         const option = document.createElement('option');
         option.value = year;
@@ -1850,6 +1964,7 @@ function processSolutionLatex(solution) {
       const yearsList = document.getElementById('yearsList');
       yearsList.innerHTML = '';
       
+      // Handle both array and object with years property
       let years = Array.isArray(yearsData) ? yearsData : (yearsData.years || []);
       
       console.log('Displaying current years:', years);
@@ -1865,6 +1980,7 @@ function processSolutionLatex(solution) {
       });
     }
 
+    // Function to add a new year
     async function addYear() {
       const newYearInput = document.getElementById('newYear');
       const year = parseInt(newYearInput.value);
@@ -1885,6 +2001,7 @@ function processSolutionLatex(solution) {
           alert('Year added successfully!');
           newYearInput.value = '';
           
+          // Add a small delay before reloading to ensure backend has saved the data
           setTimeout(() => {
             loadYears();
           }, 500);
@@ -1898,6 +2015,7 @@ function processSolutionLatex(solution) {
       }
     }
 
+    // Function to remove a year
     async function removeYear(year) {
       if (!confirm(`Are you sure you want to remove year ${year}?`)) {
         return;
@@ -1910,8 +2028,9 @@ function processSolutionLatex(solution) {
         
         if (response.ok) {
           alert('Year removed successfully!');
-          loadYears(); 
+          loadYears(); // This will now update both admin and main dropdowns
           
+          // Clear exam date dropdown if the removed year was selected
           const mainYearSelect = document.getElementById('year');
           if (parseInt(mainYearSelect.value) === year) {
             document.getElementById('examDate').innerHTML = '<option value="">-- Select Exam Date --</option>';
@@ -1926,6 +2045,7 @@ function processSolutionLatex(solution) {
       }
     }
 
+    // Function to load exam dates for selected year
     async function loadExamDatesForYear() {
       const year = document.getElementById('dateManagementYear').value;
       if (!year) {
@@ -1934,6 +2054,7 @@ function processSolutionLatex(solution) {
       }
       
       try {
+        // Admin panel should use the public endpoint too, or create a separate admin endpoint
         const response = await fetch(`/public/exam-dates/${year}`);
         if (response.ok) {
           const examDates = await response.json();
@@ -1944,6 +2065,7 @@ function processSolutionLatex(solution) {
       }
     }
 
+    // Function to display exam dates
     function displayExamDates(examDates, year) {
       const examDatesList = document.getElementById('examDatesList');
       examDatesList.innerHTML = '';
@@ -1959,6 +2081,7 @@ function processSolutionLatex(solution) {
       });
     }
 
+    // Function to add exam date
     async function addExamDate() {
       const year = document.getElementById('dateManagementYear').value;
       const date = document.getElementById('newExamDate').value;
@@ -1978,8 +2101,8 @@ function processSolutionLatex(solution) {
         if (response.ok) {
           alert('Exam date added successfully!');
           document.getElementById('newExamDate').value = '';
-          loadExamDatesForYear(); 
-          populateExamDates(); 
+          loadExamDatesForYear(); // Reload exam dates
+          populateExamDates(); // Update the main form's exam dates
         } else {
           const error = await response.json();
           alert('Error: ' + error.error);
@@ -1990,6 +2113,7 @@ function processSolutionLatex(solution) {
       }
     }
 
+    // Function to remove exam date
     async function removeExamDate(year, date) {
       if (!confirm('Are you sure you want to remove this exam date?')) {
         return;
@@ -2004,8 +2128,8 @@ function processSolutionLatex(solution) {
         
         if (response.ok) {
           alert('Exam date removed successfully!');
-          loadExamDatesForYear();
-          populateExamDates(); 
+          loadExamDatesForYear(); // Reload exam dates
+          populateExamDates(); // Update the main form's exam dates
         } else {
           const error = await response.json();
           alert('Error: ' + error.error);
@@ -2016,6 +2140,7 @@ function processSolutionLatex(solution) {
       }
     }
 
+    // Function to show/hide admin section
     function toggleAdminSection() {
       const adminSection = document.getElementById('adminSection');
       const toggleBtn = document.getElementById('adminToggleBtn');
@@ -2023,6 +2148,7 @@ function processSolutionLatex(solution) {
       if (adminSection.style.display === 'none') {
         adminSection.style.display = 'block';
         toggleBtn.style.display = 'none';
+        // Reload years when opening admin panel to ensure fresh data
         if (currentUser.role === 'superuser') {
           loadYears();
         }
@@ -2032,6 +2158,7 @@ function processSolutionLatex(solution) {
       }
     }
 
+    // Function to classify difficulty using the external API
     async function classifyDifficulty(question) {
       try {
         const response = await fetch(`${CLASSIFIER_API_URL}/classify`, {
@@ -2059,9 +2186,12 @@ function processSolutionLatex(solution) {
       }
     }
 
+    // Add auto-classification status indicator
     function addClassificationStatus() {
+      // Status is already added in the HTML, no need to modify DOM
     }
 
+    // Manual re-classification function
     async function reclassifyDifficulty() {
       const question = document.getElementById('question').value;
       if (!question || question.trim().length < 20) {
@@ -2072,6 +2202,7 @@ function processSolutionLatex(solution) {
       const difficultyInput = document.getElementById('difficulty');
       const difficultyStatus = document.getElementById('classificationStatus');
       
+      // Clear current value
       difficultyInput.value = '';
       
       if (difficultyStatus) {
@@ -2089,6 +2220,7 @@ function processSolutionLatex(solution) {
           difficultyStatus.style.color = '#4caf50';
         }
         
+        // Visual feedback
         difficultyInput.style.backgroundColor = '#e8f5e9';
         setTimeout(() => {
           difficultyInput.style.backgroundColor = '#f0f0f0';
@@ -2099,6 +2231,7 @@ function processSolutionLatex(solution) {
           difficultyStatus.style.color = '#f44336';
         }
         
+        // Allow manual input if classification fails
         difficultyInput.readOnly = false;
         difficultyInput.style.backgroundColor = '#fff';
         difficultyInput.style.cursor = 'text';
@@ -2106,11 +2239,14 @@ function processSolutionLatex(solution) {
       }
     }
 
+    // Setup batch classification for superusers
     function setupBatchClassification() {
       if (currentUser.role === 'superuser') {
         const adminSection = document.getElementById('adminSection');
         if (adminSection) {
+          // Check if batch classification section already exists
           if (!document.getElementById('batchClassificationSection')) {
+            // Add batch classification section
             const batchClassifyDiv = document.createElement('div');
             batchClassifyDiv.id = 'batchClassificationSection';
             batchClassifyDiv.className = 'admin-card';
@@ -2135,6 +2271,7 @@ function processSolutionLatex(solution) {
       }
     }
 
+    // Batch classification function
     async function batchClassifyQuestions() {
       if (!confirm('This will classify all questions without a difficulty level. Continue?')) {
         return;
@@ -2169,6 +2306,7 @@ function processSolutionLatex(solution) {
           const difficulty = await classifyDifficulty(question.question);
           
           if (difficulty) {
+            // Update the question
             const updateResponse = await fetch(`/questions/${question._id}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
@@ -2187,11 +2325,13 @@ function processSolutionLatex(solution) {
           processed++;
           progressFill.style.width = `${(processed / questionsToClassify.length) * 100}%`;
           
+          // Add delay to avoid overwhelming the API
           await new Promise(resolve => setTimeout(resolve, 500));
         }
         
         progressText.textContent = `Complete! Successfully classified ${successful} out of ${questionsToClassify.length} questions.`;
         
+        // Reload questions after batch processing
         setTimeout(() => {
           progressDiv.style.display = 'none';
           loadQuestions();
