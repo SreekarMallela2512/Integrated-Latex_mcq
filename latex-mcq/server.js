@@ -148,16 +148,30 @@ app.post('/login', async (req, res) => {
     console.log('Login attempt:', req.body.username);
     const { username, password } = req.body;
     
+    // Validate input
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+    
+    // Find user by username or email
     const user = await User.findOne({
       $or: [{ username }, { email: username }]
     });
     
-    if (!user || !(await user.comparePassword(password))) {
+    if (!user) {
+      console.log('User not found:', username);
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
+    
+    // Check password
+    const isValidPassword = await user.comparePassword(password);
+    if (!isValidPassword) {
+      console.log('Invalid password for user:', username);
       return res.status(400).json({ error: 'Invalid credentials' });
     }
     
     // Set session data
-    req.session.userId = user._id;
+    req.session.userId = user._id.toString();
     req.session.username = user.username;
     req.session.userRole = user.role;
     
@@ -184,11 +198,17 @@ app.post('/login', async (req, res) => {
       });
     });
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    console.error('Login error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    res.status(500).json({ 
+      error: 'Login failed', 
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined 
+    });
   }
 });
-
 app.post('/logout', (req, res) => {
   req.session.destroy((err) => {
     if (err) {
