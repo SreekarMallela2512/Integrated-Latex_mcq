@@ -16,6 +16,7 @@ const MCQ = require('./mcqModel');
 const User = require('./userModel');
 const Year = require('./yearModel');
 const ExamDate = require('./examDateModel');
+const ApprovedMCQ = require('./approvedMcqModel');
 
 const app = express();
 
@@ -39,32 +40,35 @@ const connectWithRetry = () => {
 
 connectWithRetry();
 
-// Session configuration
-// Session configuration - UPDATE THIS PART
-// Session configuration - FIXED VERSION
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static('public'));
+
+// Trust proxy BEFORE session middleware
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
+// SINGLE Session configuration
 app.use(session({
   secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
   resave: false,
   saveUninitialized: false,
   store: MongoStore.create({
     mongoUrl: process.env.MONGODB_URI,
-    touchAfter: 24 * 3600
+    touchAfter: 24 * 3600,
+    crypto: {
+      secret: process.env.SESSION_SECRET || 'your-secret-key-change-this'
+    }
   }),
   cookie: {
-    secure: false, // Set to false for development, true for production with HTTPS
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000,
-    sameSite: 'lax' // Change from 'strict' to 'lax'
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: process.env.NODE_ENV === 'production'
   }
 }));
-
-// Add this BEFORE session middleware to trust proxy
-app.set('trust proxy', 1); // Trust first proxy
-
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static('public'));
 
 // Health check endpoint for Render
 app.get('/health', (req, res) => {
@@ -99,10 +103,19 @@ const requireAuth = (req, res, next) => {
 
 // Middleware to check super user role
 const requireSuperUser = (req, res, next) => {
-  if (req.session.userId && req.session.userRole === 'superuser') {
+  if (req.session.userId && (req.session.userRole === 'superuser' || req.session.userRole === 'supremeuser')) {
     next();
   } else {
     res.status(403).json({ error: 'Super user access required' });
+  }
+};
+
+// Middleware to check supreme user role
+const requireSupremeUser = (req, res, next) => {
+  if (req.session.userId && req.session.userRole === 'supremeuser') {
+    next();
+  } else {
+    res.status(403).json({ error: 'Supreme user access required' });
   }
 };
 
@@ -206,36 +219,7 @@ app.get('/auth/status', (req, res) => {
     res.json({ authenticated: false });
   }
 });
-// Trust proxy BEFORE session middleware
-if (process.env.NODE_ENV === 'production') {
-  app.set('trust proxy', 1);
-}
 
-// Session configuration
-const sessionConfig = {
-  secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
-  resave: false,
-  saveUninitialized: false,
-  store: MongoStore.create({
-    mongoUrl: process.env.MONGODB_URI,
-    touchAfter: 24 * 3600,
-    crypto: {
-      secret: process.env.SESSION_SECRET || 'your-secret-key-change-this'
-    }
-  }),
-  cookie: {
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
-  }
-};
-
-// Set secure cookies only in production with HTTPS
-if (process.env.NODE_ENV === 'production') {
-  sessionConfig.cookie.secure = true;
-}
-
-app.use(session(sessionConfig));
 // MCQ submission route - UPDATED WITH SOLUTION FIELD
 app.post('/submit', requireAuth, async (req, res) => {
   try {
@@ -289,7 +273,8 @@ app.post('/submit', requireAuth, async (req, res) => {
       solution: solution || '',
       pyqType: pyqType || 'Not PYQ',
       createdBy: req.session.userId,
-      autoClassified: Boolean(autoClassified)
+      autoClassified: Boolean(autoClassified),
+      approvalStatus: 'pending' // Add default approval status
     };
 
     console.log("Initial MCQ data:", JSON.stringify(mcqData, null, 2));
@@ -404,10 +389,10 @@ app.get('/questions', requireAuth, async (req, res) => {
     let questions;
     
     // Build filter based on user role
-    if (req.session.userRole === 'superuser') {
+    if (req.session.userRole === 'superuser' || req.session.userRole === 'supremeuser') {
       // Super users can see all questions
       if (subject) filter.subject = subject;
-      if (pyqType && pyqType !== 'all') filter.pyqType = pyqType;
+           if (pyqType && pyqType !== 'all') filter.pyqType = pyqType;
       if (year) filter.year = parseInt(year);
       if (shift) filter.shift = shift;
     } else {
@@ -423,16 +408,19 @@ app.get('/questions', requireAuth, async (req, res) => {
     const sort = {};
     sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
 
-    if (req.session.userRole === 'superuser') {
+    if (req.session.userRole === 'superuser' || req.session.userRole === 'supremeuser') {
       questions = await MCQ.find(filter)
         .populate('createdBy', 'username')
+        .populate('approvedBy', 'username')
         .sort(sort)
         .lean(); // Use lean() for better performance
     } else {
       questions = await MCQ.find(filter)
         .sort(sort)
         .lean();
-    }     // Ensure createdAt is included in response and include solution field
+    }
+    
+    // Ensure createdAt is included in response and include solution field
     questions = questions.map(q => ({
       ...q,
       createdAt: q.createdAt || q._id.getTimestamp(), // Fallback to ObjectId timestamp if createdAt is missing
@@ -454,7 +442,7 @@ app.get('/questions/:id', requireAuth, async (req, res) => {
     let filter = { _id: id };
     
     // Regular users can only access their own questions
-    if (req.session.userRole !== 'superuser') {
+    if (req.session.userRole !== 'superuser' && req.session.userRole !== 'supremeuser') {
       filter.createdBy = req.session.userId;
     }
     
@@ -481,7 +469,8 @@ app.get('/questions/:id', requireAuth, async (req, res) => {
       examDate: question.examDate,
       autoClassified: question.autoClassified,
       createdBy: question.createdBy,
-      createdAt: question.createdAt
+      createdAt: question.createdAt,
+      approvalStatus: question.approvalStatus
     };
     
     res.json(questionData);
@@ -510,7 +499,7 @@ app.put('/questions/:id', requireAuth, async (req, res) => {
     let filter = { _id: id };
     
     // Regular users can only update their own questions
-    if (req.session.userRole !== 'superuser') {
+    if (req.session.userRole !== 'superuser' && req.session.userRole !== 'supremeuser') {
       filter.createdBy = req.session.userId;
     }
     
@@ -542,7 +531,7 @@ app.delete('/questions/:id', requireAuth, async (req, res) => {
     let filter = { _id: id };
     
     // Regular users can only delete their own questions
-    if (req.session.userRole !== 'superuser') {
+    if (req.session.userRole !== 'superuser' && req.session.userRole !== 'supremeuser') {
       filter.createdBy = req.session.userId;
     }
     
@@ -564,7 +553,7 @@ app.get('/stats', requireAuth, async (req, res) => {
   try {
     let matchStage = {};
     
-    if (req.session.userRole !== 'superuser') {
+    if (req.session.userRole !== 'superuser' && req.session.userRole !== 'supremeuser') {
       matchStage.createdBy = new mongoose.Types.ObjectId(req.session.userId);
     }
 
@@ -683,7 +672,7 @@ app.get('/available-years', requireAuth, async (req, res) => {
   try {
     let matchStage = { year: { $exists: true, $ne: null } };
     
-    if (req.session.userRole !== 'superuser') {
+    if (req.session.userRole !== 'superuser' && req.session.userRole !== 'supremeuser') {
       matchStage.createdBy = new mongoose.Types.ObjectId(req.session.userId);
     }
 
@@ -703,7 +692,7 @@ function getHardcodedExamDates(year) {
       { date: '2025-01-24', label: 'January 24, 2025' },
       { date: '2025-01-29', label: 'January 29, 2025' },
       { date: '2025-01-31', label: 'January 31, 2025' },
-      { date: '2025-04-01', label: 'April 1, 2025' },
+            { date: '2025-04-01', label: 'April 1, 2025' },
       { date: '2025-04-04', label: 'April 4, 2025' },
       { date: '2025-04-08', label: 'April 8, 2025' },
       { date: '2025-04-12', label: 'April 12, 2025' }
@@ -751,7 +740,7 @@ function getHardcodedExamDates(year) {
       { date: '2021-02-24', label: 'February 24, 2021' },
       { date: '2021-02-25', label: 'February 25, 2021' },
       { date: '2021-02-26', label: 'February 26, 2021' },
-            { date: '2021-03-16', label: 'March 16, 2021' },
+      { date: '2021-03-16', label: 'March 16, 2021' },
       { date: '2021-03-17', label: 'March 17, 2021' },
       { date: '2021-03-18', label: 'March 18, 2021' },
       { date: '2021-07-20', label: 'July 20, 2021' },
@@ -767,7 +756,7 @@ function getHardcodedExamDates(year) {
   return examDates[year] || [];
 }
 
-// Year Management Routes (Superuser only) - NO CHANGES NEEDED
+// Year Management Routes (Superuser only)
 app.get('/admin/years', requireSuperUser, async (req, res) => {
   try {
     // Get years from Year collection
@@ -784,26 +773,6 @@ app.get('/admin/years', requireSuperUser, async (req, res) => {
   } catch (err) {
     console.error('Error fetching years:', err);
     res.status(500).json({ error: 'Error fetching years' });
-  }
-});
-
-// Public route: Get all available years for the frontend dropdown - NO CHANGES NEEDED
-app.get('/api/years', async (req, res) => {
-  try {
-    // Get years from Year collection
-    const yearDocs = await Year.find().sort({ year: -1 });
-    const storedYears = yearDocs.map(doc => doc.year);
-    
-    // Default years
-    const defaultYears = [2021, 2022, 2023, 2024, 2025];
-    
-    // Merge and deduplicate
-    const combinedYears = [...new Set([...storedYears, ...defaultYears])].sort((a, b) => b - a);
-
-    res.json({ years: combinedYears });
-  } catch (err) {
-    console.error('Error fetching public years:', err);
-    res.status(500).json({ error: 'Failed to fetch years' });
   }
 });
 
@@ -862,7 +831,7 @@ app.delete('/admin/years/:year', requireSuperUser, async (req, res) => {
   }
 });
 
-// Exam Date Management Routes (Superuser only) - NO CHANGES NEEDED
+// Exam Date Management Routes (Superuser only)
 app.get('/admin/exam-dates/:year', requireSuperUser, async (req, res) => {
   try {
     const { year } = req.params;
@@ -1000,6 +969,87 @@ app.delete('/admin/exam-dates', requireSuperUser, async (req, res) => {
   }
 });
 
+// Public route: Get all available years (no auth required)
+app.get('/public/years', async (req, res) => {
+  try {
+    // Get years from Year collection
+    const yearDocs = await Year.find().sort({ year: -1 });
+    const storedYears = yearDocs.map(doc => doc.year);
+    
+    // Default years
+    const defaultYears = [2021, 2022, 2023, 2024, 2025];
+    
+    // Merge and deduplicate
+    const combinedYears = [...new Set([...storedYears, ...defaultYears])].sort((a, b) => b - a);
+
+    res.json(combinedYears);
+  } catch (err) {
+    console.error('Error fetching public years:', err);
+    // Fallback to default years if error
+    res.json([2025, 2024, 2023, 2022, 2021]);
+  }
+});
+
+// Public route for exam dates (no auth required)
+app.get('/public/exam-dates/:year', async (req, res) => {
+  try {
+    const { year } = req.params;
+    const yearNum = parseInt(year);
+    
+    // Get exam dates from ExamDate collection
+    const storedDates = await ExamDate.find({ year: yearNum }).sort({ date: 1 });
+    
+    // Get hardcoded exam dates for the year
+    const hardcodedDates = getHardcodedExamDates(yearNum);
+    
+    // Create a map to merge dates
+    const dateMap = new Map();
+    
+    // Add hardcoded dates
+    hardcodedDates.forEach(d => {
+      dateMap.set(d.date, {
+        date: d.date,
+        label: d.label
+      });
+    });
+    
+    // Add stored dates
+    storedDates.forEach(d => {
+      dateMap.set(d.date.toISOString().split('T')[0], {
+        date: d.date.toISOString().split('T')[0],
+        label: d.label
+      });
+    });
+    
+    // Convert map to array and sort
+    const allDates = Array.from(dateMap.values())
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    res.json(allDates);
+  } catch (err) {
+    console.error('Error fetching exam dates:', err);
+    res.status(500).json({ error: 'Error fetching exam dates' });
+  }
+});
+
+// Count questions with a base serial number
+app.get('/questions/count/:baseSerial', requireAuth, async (req, res) => {
+  try {
+    const { baseSerial } = req.params;
+    
+    // Count questions that start with this base serial
+    const count = await MCQ.countDocuments({
+      questionNo: { $regex: `^${baseSerial}`, $options: 'i' }
+    });
+    
+    res.json({ count });
+  } catch (error) {
+    console.error('Error counting questions:', error);
+    res.status(500).json({ error: 'Failed to count questions' });
+  }
+});
+
+// Test classifier endpoint
 app.get('/test-classifier-manual', async (req, res) => {
   const results = {};
   
@@ -1011,7 +1061,7 @@ app.get('/test-classifier-manual', async (req, res) => {
   
   // Test health endpoint
   try {
-    const healthResponse = await axios.get('https://mcq-classifier-g1z9.onrender.com/health');
+        const healthResponse = await axios.get('https://mcq-classifier-g1z9.onrender.com/health');
     results.health_check = {
       success: true,
       data: healthResponse.data
@@ -1051,88 +1101,7 @@ app.get('/test-classifier-manual', async (req, res) => {
   res.json(results);
 });
 
-// Public route: Get all available years (no auth required) - NO CHANGES NEEDED
-app.get('/public/years', async (req, res) => {
-  try {
-    // Get years from Year collection
-    const yearDocs = await Year.find().sort({ year: -1 });
-    const storedYears = yearDocs.map(doc => doc.year);
-    
-    // Default years
-    const defaultYears = [2021, 2022, 2023, 2024, 2025];
-    
-    // Merge and deduplicate
-    const combinedYears = [...new Set([...storedYears, ...defaultYears])].sort((a, b) => b - a);
-
-    res.json(combinedYears);
-  } catch (err) {
-    console.error('Error fetching public years:', err);
-    // Fallback to default years if error
-    res.json([2025, 2024, 2023, 2022, 2021]);
-  }
-});
-
-// Public route for exam dates (no auth required) - NO CHANGES NEEDED
-app.get('/public/exam-dates/:year', async (req, res) => {
-  try {
-    const { year } = req.params;
-    const yearNum = parseInt(year);
-    
-    // Get exam dates from ExamDate collection
-    const storedDates = await ExamDate.find({ year: yearNum }).sort({ date: 1 });
-    
-    // Get hardcoded exam dates for the year
-    const hardcodedDates = getHardcodedExamDates(yearNum);
-    
-    // Create a map to merge dates
-    const dateMap = new Map();
-    
-    // Add hardcoded dates
-    hardcodedDates.forEach(d => {
-      dateMap.set(d.date, {
-        date: d.date,
-        label: d.label
-      });
-    });
-    // Count how many questions already exist with the given serial number prefix
-app.get('/questions/count/:prefix', requireAuth, async (req, res) => {
-  const { prefix } = req.params;
-  try {
-    const regex = new RegExp(`^${prefix}`);
-    const count = await MCQ.countDocuments({ questionNo: { $regex: regex } });
-    res.json({ count });
-  } catch (err) {
-    console.error('Error counting questions:', err);
-    res.status(500).json({ error: 'Error counting questions' });
-  }
-});
-
-    
-    // Add stored dates
-    storedDates.forEach(d => {
-      dateMap.set(d.date.toISOString().split('T')[0], {
-        date: d.date.toISOString().split('T')[0],
-        label: d.label
-      });
-    });
-    
-    // Convert map to array and sort
-    const allDates = Array.from(dateMap.values())
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    res.json(allDates);
-  } catch (err) {
-    console.error('Error fetching exam dates:', err);
-    res.status(500).json({ error: 'Error fetching exam dates' });
-  }
-});
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({ error: 'Internal server error' });
-});
-
+// API classify endpoint
 app.post('/api/classify', requireAuth, async (req, res) => {
   try {
     const response = await axios.post(
@@ -1145,33 +1114,6 @@ app.post('/api/classify', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Classification failed' });
   }
 });
-// Add this route to count questions with a base serial number
-app.get('/questions/count/:baseSerial', requireAuth, async (req, res) => {
-  try {
-    const { baseSerial } = req.params;
-    
-    // Count questions that start with this base serial
-    const count = await MCQ.countDocuments({
-      questionNo: { $regex: `^${baseSerial}`, $options: 'i' }
-    });
-    
-    res.json({ count });
-  } catch (error) {
-    console.error('Error counting questions:', error);
-    res.status(500).json({ error: 'Failed to count questions' });
-  }
-});
-// Import the new model at the top
-const ApprovedMCQ = require('./approvedMcqModel');
-
-// Middleware to check supreme user role
-const requireSupremeUser = (req, res, next) => {
-  if (req.session.userId && req.session.userRole === 'supremeuser') {
-    next();
-  } else {
-    res.status(403).json({ error: 'Supreme user access required' });
-  }
-};
 
 // Get pending questions for approval (supremeuser only)
 app.get('/pending-questions', requireSupremeUser, async (req, res) => {
@@ -1365,6 +1307,12 @@ app.post('/bulk-approve', requireSupremeUser, async (req, res) => {
   }
 });
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server started on port ${PORT}`);
@@ -1378,7 +1326,8 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('✅ CRUD operations for questions');
   console.log('✅ Admin year and exam date management');
   console.log('✅ Auto-classification integration');
-  console.log('✅ Solution field with LaTeX support'); // Add this line
+  console.log('✅ Solution field with LaTeX support');
+  console.log('✅ Question approval system');
   
   if (CLASSIFIER_URL) {
     console.log(`🤖 Classifier service URL: ${CLASSIFIER_URL}`);
