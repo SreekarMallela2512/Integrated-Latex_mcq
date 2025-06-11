@@ -903,6 +903,19 @@ app.get('/admin/exam-dates/:year', requireSuperUser, async (req, res) => {
     res.status(500).json({ error: 'Error fetching exam dates' });
   }
 });
+// Get available years for JEE MAIN PYQ
+app.get('/api/years-for-pyq', async (req, res) => {
+  try {
+    const yearDocs = await Year.find().sort({ year: -1 });
+    const storedYears = yearDocs.map(doc => doc.year);
+    const defaultYears = [2021, 2022, 2023, 2024, 2025];
+    const allYears = [...new Set([...storedYears, ...defaultYears])].sort((a, b) => b - a);
+    res.json(allYears);
+  } catch (err) {
+    console.error('Error fetching years for PYQ:', err);
+    res.status(500).json({ error: 'Error fetching years' });
+  }
+});
 
 app.post('/admin/exam-dates', requireSuperUser, async (req, res) => {
   try {

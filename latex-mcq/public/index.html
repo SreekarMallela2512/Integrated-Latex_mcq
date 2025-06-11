@@ -996,13 +996,14 @@ function updateUserInterface() {
 }
 
        // Toggle PYQ fields based on selection
-    function togglePyqFields() {
+// Toggle PYQ fields based on selection
+async function togglePyqFields() {
   const pyqType = document.getElementById('pyqType').value;
   const pyqDetails = document.getElementById('pyqDetails');
   const yearSelect = document.getElementById('year');
   const examDateSelect = document.getElementById('examDate');
   const questionNoInput = document.getElementById('questionNo');
-  
+
   if (pyqType === 'Not PYQ') {
     pyqDetails.style.display = 'none';
     yearSelect.required = false;
@@ -1012,7 +1013,6 @@ function updateUserInterface() {
       radio.checked = false;
       radio.required = false;
     });
-    
     // Reset question number field for manual input
     questionNoInput.value = '';
     questionNoInput.readOnly = false;
@@ -1025,21 +1025,25 @@ function updateUserInterface() {
     document.querySelectorAll('input[name="shift"]').forEach(radio => {
       radio.required = true;
     });
-    
-    // Update question number when PYQ is selected
-    updateQuestionNumber();
+
+    try {
+      // Load years for PYQ type
+      const response = await fetch('/api/years-for-pyq');
+      if (!response.ok) throw new Error('Failed to load years');
+      const years = await response.json();
+
+      // Populate year dropdown
+      updateMainPyqYearDropdown(years);
+
+      // Update question number when PYQ is selected
+      updateQuestionNumber();
+    } catch (error) {
+      console.error('Error loading years for PYQ:', error);
+      const defaultYears = [2025, 2024, 2023, 2022, 2021];
+      updateMainPyqYearDropdown(defaultYears);
+    }
   }
 }
-    // Logout functionality
-    document.getElementById('logoutBtn').addEventListener('click', async () => {
-      try {
-        await fetch('/logout', { method: 'POST' });
-        window.location.href = '/login.html';
-      } catch (error) {
-        console.error('Logout failed:', error);
-      }
-    });
-
     
 
  function renderLatex() {
