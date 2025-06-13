@@ -285,7 +285,7 @@ app.post('/submit', requireAuth, async (req, res) => {
       correctOption: correctOptionIndex,
       subject,
       topic,
-      difficulty: userDifficulty,
+      difficulty: req.session.userRole === 'superuser' ? userDifficulty.toLowerCase() : (autoClassified ? data.difficulty.toLowerCase() : 'easy'), // Allow superuser to manually set difficulty
       solution: solution || '',
       pyqType: pyqType || 'Not PYQ',
       createdBy: req.session.userId,
@@ -512,6 +512,9 @@ app.put('/questions/:id', requireAuth, async (req, res) => {
     // Regular users can only update their own questions
     if (req.session.userRole !== 'superuser') {
       filter.createdBy = req.session.userId;
+    }
+     if (req.session.userRole === 'superuser') {
+      updateData.difficulty = updateData.difficulty.toLowerCase();
     }
     
     const updatedQuestion = await MCQ.findOneAndUpdate(
