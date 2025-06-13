@@ -1106,6 +1106,19 @@ async function togglePyqFields() {
     });
 
     // Auto-classification logic
+    // Add this code after auto-classification logic in renderLatex function
+if (currentUser.role === 'superuser') {
+  const difficultyInput = document.getElementById('difficulty');
+  difficultyInput.readOnly = false;
+  difficultyInput.style.backgroundColor = '#fff';
+  difficultyInput.style.cursor = 'text';
+  difficultyInput.placeholder = 'Enter: easy, medium, or hard';
+}
+if (currentUser.role === 'superuser') {
+  if (document.getElementById('classificationStatus')) {
+    document.getElementById('classificationStatus').textContent = '';
+  }
+}
     if (input.length > 30 && !editMode) {
       const difficultyInput = document.getElementById('difficulty');
       const difficultyStatus = document.getElementById('classificationStatus');
