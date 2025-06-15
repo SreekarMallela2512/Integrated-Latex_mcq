@@ -537,18 +537,7 @@ app.put('/questions/:id', requireAuth, async (req, res) => {
   }
 });
 // Get rejected questions (supremeuser only)
-app.get('/rejected-questions', requireSupremeUser, async (req, res) => {
-  try {
-    const rejectedQuestions = await MCQ.find({ approvalStatus: 'rejected' })
-      .populate('createdBy', 'username')
-      .sort({ createdAt: -1 });
-    
-    res.json(rejectedQuestions);
-  } catch (error) {
-    console.error('Error fetching rejected questions:', error);
-    res.status(500).json({ error: 'Error fetching rejected questions' });
-  }
-});
+
 
 // Delete question (only own questions for regular users) - NO CHANGES NEEDED
 app.delete('/questions/:id', requireAuth, async (req, res) => {
@@ -1391,6 +1380,18 @@ app.post('/bulk-approve', requireSupremeUser, async (req, res) => {
   } catch (error) {
     console.error('Error in bulk approval:', error);
     res.status(500).json({ error: 'Error in bulk approval' });
+  }
+});
+app.get('/rejected-questions', requireSupremeUser, async (req, res) => {
+  try {
+    const rejectedQuestions = await MCQ.find({ approvalStatus: 'rejected' })
+      .populate('createdBy', 'username')
+      .sort({ createdAt: -1 });
+    
+    res.json(rejectedQuestions);
+  } catch (error) {
+    console.error('Error fetching rejected questions:', error);
+    res.status(500).json({ error: 'Error fetching rejected questions' });
   }
 });
 
