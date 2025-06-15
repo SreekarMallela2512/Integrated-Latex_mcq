@@ -1282,9 +1282,16 @@ app.post('/reject-question/:id', requireSupremeUser, async (req, res) => {
 });
 
 // Get approved questions (accessible to all authenticated users)
+// Get approved questions (accessible to all authenticated users)
 app.get('/approved-questions', requireAuth, async (req, res) => {
   try {
-    const approvedQuestions = await ApprovedMCQ.find()
+    let filter = {};
+    
+    if (req.session.userRole !== 'supremeuser') {
+      filter.createdBy = req.session.userId;
+    }
+    
+    const approvedQuestions = await ApprovedMCQ.find(filter)
       .populate('createdBy', 'username')
       .populate('approvedBy', 'username')
       .sort({ approvedAt: -1 });
@@ -1295,7 +1302,6 @@ app.get('/approved-questions', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Error fetching approved questions' });
   }
 });
-
 // Get approval statistics (supremeuser only)
 app.get('/approval-stats', requireSupremeUser, async (req, res) => {
   try {
@@ -1382,9 +1388,16 @@ app.post('/bulk-approve', requireSupremeUser, async (req, res) => {
     res.status(500).json({ error: 'Error in bulk approval' });
   }
 });
-app.get('/rejected-questions', requireSupremeUser, async (req, res) => {
+// Get rejected questions (supremeuser only)
+app.get('/rejected-questions', requireAuth, async (req, res) => {
   try {
-    const rejectedQuestions = await MCQ.find({ approvalStatus: 'rejected' })
+    let filter = { approvalStatus: 'rejected' };
+    
+    if (req.session.userRole !== 'supremeuser') {
+      filter.createdBy = req.session.userId;
+    }
+    
+    const rejectedQuestions = await MCQ.find(filter)
       .populate('createdBy', 'username')
       .sort({ createdAt: -1 });
     
