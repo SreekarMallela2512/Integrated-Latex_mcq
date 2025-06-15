@@ -217,7 +217,9 @@
     <hr />
     <h2 id="questionsTitle">Your Questions</h2>
     <!-- Replace the existing view questions button and questionList with this complete section -->
-<button onclick="loadQuestions()" class="view-questions-btn">🔍 View Questions</button>
+<button onclick="loadQuestions('all')" class="view-questions-btn">🔍 View Questions</button>
+<button onclick="loadQuestions('approved')" class="view-questions-btn">👍 Show Approved Questions</button>
+<button onclick="loadQuestions('rejected')" class="view-questions-btn">🚫 View Rejected Questions</button>
 
 <!-- Search and Filter Container -->
 <div class="search-filter-container" id="searchFilterContainer" style="display: none;">
@@ -1433,10 +1435,18 @@ function loadCreators() {
 
     // New loadQuestions function that integrates with search/filter
     // New loadQuestions function that integrates with search/filter
-async function loadQuestions() {
+async function loadQuestions(type = 'all') {
   try {
     console.log('Starting to load questions...');
-    const response = await fetch('/questions');
+    let url = '/questions';
+
+    if (type === 'approved') {
+      url = '/approved-questions';
+    } else if (type === 'rejected') {
+      url = '/rejected-questions';
+    }
+
+    const response = await fetch(url);
     
     console.log('Response status:', response.status);
     
@@ -1476,6 +1486,16 @@ async function loadQuestions() {
     filteredQuestions = [...allQuestions];
     displayFilteredQuestions();
     updateResultsSummary();
+    
+    // Update questions title based on type
+    const questionsTitle = document.getElementById('questionsTitle');
+    if (type === 'approved') {
+      questionsTitle.textContent = 'Approved Questions';
+    } else if (type === 'rejected') {
+      questionsTitle.textContent = 'Rejected Questions';
+    } else {
+      questionsTitle.textContent = (currentUser.role === 'superuser' || currentUser.role === 'supremeuser') ? 'All Questions' : 'Your Questions';
+    }
     
   } catch (error) {
     console.error('Detailed error loading questions:', error);
