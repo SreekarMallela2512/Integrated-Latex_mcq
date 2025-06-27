@@ -10,7 +10,9 @@ const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const axios = require('axios');
 const path = require('path');
-
+const multer = require('multer');
+const csv = require('csv-parser');
+const fs = require('fs');
 // Import models
 const MCQ = require('./mcqModel');
 const User = require('./userModel');
@@ -65,7 +67,20 @@ app.set('trust proxy', 1); // Trust first proxy
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
-
+// Configure multer for CSV uploads
+const upload = multer({
+  dest: 'uploads/',
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV files are allowed'));
+    }
+  },
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  }
+});
 // Health check endpoint for Render
 app.get('/health', (req, res) => {
   res.status(200).json({ 
@@ -1407,6 +1422,240 @@ app.get('/rejected-questions', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Error fetching rejected questions' });
   }
 });
+// Bulk import questions from CSV (superuser only)
+app.post('/bulk-import', requireSuperUser, upload.single('csvFile'), async (req, res) => {
+  const results = [];
+  const errors = [];
+  let processed = 0;
+  let successful = 0;
+  
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  try {
+    // Parse CSV file
+    const questions = [];
+    
+    await new Promise((resolve, reject) => {
+      fs.createReadStream(req.file.path)
+        .pipe(csv())
+        .on('data', (row) => {
+          questions.push(row);
+        })
+        .on('end', resolve)
+        .on('error', reject);
+    });
+
+    // Process each question
+    for (const row of questions) {
+      processed++;
+      
+      try {
+        // Validate required fields
+        if (!row.question || !row.option1 || !row.option2 || !row.option3 || !row.option4) {
+          errors.push({
+            row: processed,
+            error: 'Missing required fields (question or options)',
+            data: row
+          });
+          continue;
+        }
+
+        // Parse options
+        const options = [
+          row.option1.trim(),
+          row.option2.trim(),
+          row.option3.trim(),
+          row.option4.trim()
+        ];
+
+        // Parse correct option (handle both letter and number format)
+        let correctOption;
+        if (row.correctOption) {
+          if (/^[A-Da-d]$/.test(row.correctOption.trim())) {
+            correctOption = row.correctOption.trim().toUpperCase().charCodeAt(0) - 65;
+          } else if (/^[1-4]$/.test(row.correctOption.trim())) {
+            correctOption = parseInt(row.correctOption.trim()) - 1;
+          } else {
+            errors.push({
+              row: processed,
+              error: 'Invalid correct option format',
+              data: row
+            });
+            continue;
+          }
+        } else {
+          errors.push({
+            row: processed,
+            error: 'Missing correct option',
+            data: row
+          });
+          continue;
+        }
+
+        // Check for duplicate
+        const trimmedQuestion = row.question.trim();
+        const duplicateQuestion = await MCQ.findOne({ question: trimmedQuestion });
+        if (duplicateQuestion) {
+          errors.push({
+            row: processed,
+            error: 'Duplicate question already exists',
+            data: row
+          });
+          continue;
+        }
+
+        // Build MCQ data
+        const mcqData = {
+          questionNo: row.questionNo || `BULK-${Date.now()}-${processed}`,
+          question: trimmedQuestion,
+          options: options,
+          correctOption: correctOption,
+          subject: row.subject || 'Physics',
+          topic: row.topic || 'General',
+          difficulty: row.difficulty ? row.difficulty.toLowerCase() : 'medium',
+          solution: row.solution || '',
+          pyqType: row.pyqType || 'Not PYQ',
+          createdBy: req.session.userId,
+          approvalStatus: 'pending', // All bulk imported questions need approval
+          autoClassified: false
+        };
+
+        // Handle PYQ specific fields
+        if (mcqData.pyqType === 'JEE MAIN PYQ') {
+          if (row.year) {
+            mcqData.year = parseInt(row.year);
+          }
+          if (row.examDate) {
+            mcqData.examDate = new Date(row.examDate);
+          }
+          if (row.shift) {
+            mcqData.shift = row.shift;
+          }
+        }
+
+        // Validate difficulty
+        if (!['easy', 'medium', 'hard'].includes(mcqData.difficulty)) {
+          mcqData.difficulty = 'medium';
+        }
+
+        // Save question
+        const mcq = new MCQ(mcqData);
+        await mcq.save();
+        
+        successful++;
+        results.push({
+          row: processed,
+          questionNo: mcq.questionNo,
+          status: 'success'
+        });
+
+      } catch (err) {
+        console.error(`Error processing row ${processed}:`, err);
+        errors.push({
+          row: processed,
+          error: err.message,
+          data: row
+        });
+      }
+    }
+
+    // Clean up uploaded file
+    fs.unlinkSync(req.file.path);
+
+    // Return summary
+    res.json({
+      summary: {
+        total: processed,
+        successful: successful,
+        failed: errors.length
+      },
+      results: results,
+      errors: errors
+    });
+
+  } catch (error) {
+    console.error('Bulk import error:', error);
+    
+    // Clean up file on error
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    
+    res.status(500).json({ error: 'Error processing CSV file' });
+  }
+});
+
+// Get CSV template
+app.get('/csv-template', requireAuth, (req, res) => {
+  const template = `questionNo,question,option1,option2,option3,option4,correctOption,subject,topic,difficulty,solution,pyqType,year,examDate,shift
+Q1,What is 2+2?,2,3,4,5,C,Maths,Arithmetic,easy,Simple addition: 2+2=4,Not PYQ,,,
+Q2,Find the derivative of $x^2$,$2x$,$x^2$,$x$,$2$,A,Maths,Calculus,medium,Using power rule: $\\frac{d}{dx}(x^2) = 2x$,Not PYQ,,,
+JEE-2024-001,A particle moves with constant velocity. What is its acceleration?,0 m/s²,1 m/s²,2 m/s²,Cannot be determined,A,Physics,Kinematics,easy,Constant velocity means zero acceleration,JEE MAIN PYQ,2024,2024-01-27,Shift 1`;
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="mcq_import_template.csv"');
+  res.send(template);
+});
+// Export questions to CSV
+app.get('/export-questions', requireAuth, async (req, res) => {
+  try {
+    let filter = {};
+    
+    // Apply filters from query params
+    if (req.query.subject) filter.subject = req.query.subject;
+    if (req.query.topic) filter.topic = req.query.topic;
+    if (req.query.difficulty) filter.difficulty = req.query.difficulty;
+    if (req.query.pyqType) filter.pyqType = req.query.pyqType;
+    if (req.query.year) filter.year = parseInt(req.query.year);
+    
+    // Regular users can only export their own questions
+    if (req.session.userRole !== 'superuser' && req.session.userRole !== 'supremeuser') {
+      filter.createdBy = req.session.userId;
+    }
+    
+    const questions = await MCQ.find(filter)
+      .populate('createdBy', 'username')
+      .sort({ createdAt: -1 });
+    
+    // Create CSV content
+    const csvRows = ['questionNo,question,option1,option2,option3,option4,correctOption,subject,topic,difficulty,solution,pyqType,year,examDate,shift,createdBy,approvalStatus'];
+    
+    questions.forEach(q => {
+      const row = [
+        q.questionNo || '',
+        `"${q.question.replace(/"/g, '""')}"`,
+        `"${q.options[0].replace(/"/g, '""')}"`,
+        `"${q.options[1].replace(/"/g, '""')}"`,
+        `"${q.options[2].replace(/"/g, '""')}"`,
+        `"${q.options[3].replace(/"/g, '""')}"`,
+        String.fromCharCode(65 + q.correctOption),
+        q.subject || '',
+        q.topic || '',
+        q.difficulty || '',
+        `"${(q.solution || '').replace(/"/g, '""')}"`,
+        q.pyqType || 'Not PYQ',
+        q.year || '',
+        q.examDate ? new Date(q.examDate).toISOString().split('T')[0] : '',
+        q.shift || '',
+        q.createdBy?.username || '',
+        q.approvalStatus || ''
+      ];
+      csvRows.push(row.join(','));
+    });
+    
+    const csv = csvRows.join('\n');
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="questions_export_${new Date().toISOString().split('T')[0]}.csv"`);
+    res.send(csv);
+    
+  } catch (error) {
+    console.error('Export error:', error);
+    res.status(500).json({ error: 'Error exporting questions' });
+  }
+});
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
@@ -1422,6 +1671,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('✅ Admin year and exam date management');
   console.log('✅ Auto-classification integration');
   console.log('✅ Solution field with LaTeX support'); // Add this line
+  console.log('Access the latex-mcq service: Visit http://localhost:3000 in your web browser to access the latex-mcq service.');
   
   if (CLASSIFIER_URL) {
     console.log(`🤖 Classifier service URL: ${CLASSIFIER_URL}`);

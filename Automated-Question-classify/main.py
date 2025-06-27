@@ -129,7 +129,7 @@ async def get_session_stats(session_id: str):
 
 if __name__ == "__main__":
     # Get port from environment variable (Render sets this)
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 8000))
     
     # Run the FastAPI app with uvicorn
     uvicorn.run(

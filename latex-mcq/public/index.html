@@ -60,6 +60,61 @@
   Show Supreme Panel
 </button>
 <!-- Admin Management Section (Only visible to superusers) -->
+ <!-- Bulk Import Section (Only visible to superusers) -->
+<div id="bulkImportSection" class="bulk-import-section" style="display: none;">
+  <h2>📤 Bulk Import Questions</h2>
+  
+  <div class="import-card">
+    <h3>Import from CSV File</h3>
+    
+    <div class="import-instructions">
+      <h4>Instructions:</h4>
+      <ol>
+        <li>Download the CSV template</li>
+        <li>Fill in your questions following the template format</li>
+        <li>For correct option, use A, B, C, D or 1, 2, 3, 4</li>
+        <li>LaTeX formulas are supported in questions and options</li>
+        <li>All imported questions will require approval</li>
+      </ol>
+    </div>
+    
+    <div class="import-actions">
+      <button onclick="downloadCSVTemplate()" class="template-btn">📥 Download Template</button>
+      
+      <div class="file-upload-container">
+        <input type="file" id="csvFile" accept=".csv" onchange="handleFileSelect(event)" />
+        <button onclick="document.getElementById('csvFile').click()" class="upload-btn">
+          📁 Choose CSV File
+        </button>
+        <span id="selectedFileName"></span>
+      </div>
+      
+      <button onclick="importQuestions()" id="importBtn" class="import-btn" disabled>
+        🚀 Import Questions
+      </button>
+    </div>
+    
+    <div id="importProgress" style="display: none;">
+      <div class="progress-bar">
+        <div id="importProgressFill"></div>
+      </div>
+      <p id="importStatus"></p>
+    </div>
+    
+    <div id="importResults" style="display: none;">
+      <h4>Import Results</h4>
+      <div id="importSummary"></div>
+      <div id="importErrors"></div>
+    </div>
+  </div>
+  
+  <button onclick="toggleBulkImportSection()" class="toggle-btn">Hide Import Panel</button>
+</div>
+
+<!-- Bulk Import Toggle Button (Only visible to superusers) -->
+<button id="bulkImportToggleBtn" onclick="toggleBulkImportSection()" class="bulk-import-toggle-btn" style="display: none;">
+  📤 Bulk Import
+</button>
 <div id="adminSection" class="admin-section" style="display: none;">
   <h2>🔧 Admin Management</h2>
   
@@ -377,6 +432,264 @@ let previewTimeout;
     const mathsTopics = ["Sets, Relations and Functions", "Complex Numbers and Quadratic Equations", "Matrices and Determinants", "Permutations and Combinations", "Mathematical Induction", "Binomial Theorem", "Sequences and Series", "Limits, Continuity and Differentiability", "Integral Calculus", "Differential Equations", "Coordinate Geometry", "3D Geometry", "Vector Algebra", "Statistics and Probability", "Trigonometry", "Mathematical Reasoning" , "Application of Derivatives"];
     // Add these variables at the top with other global variables
 let questionCountCache = {};
+// Bulk Import Functions
+let selectedFile = null;
+// Replace your existing exportQuestions function with this enhanced version
+function exportQuestions(format = 'csv', source = 'client') {
+    if (format === 'csv') {
+        if (source === 'server') {
+            // Server-side export (better for large datasets)
+            const params = new URLSearchParams();
+            if (activeFilters.subject) params.append('subject', activeFilters.subject);
+            if (activeFilters.topic) params.append('topic', activeFilters.topic);
+            if (activeFilters.difficulty) params.append('difficulty', activeFilters.difficulty);
+            if (activeFilters.pyqType) params.append('pyqType', activeFilters.pyqType);
+            if (activeFilters.year) params.append('year', activeFilters.year);
+            
+            window.location.href = `/export-questions?${params.toString()}`;
+        } else {
+            // Client-side export (your existing implementation)
+            const questionsToExport = filteredQuestions.length > 0 ? filteredQuestions : allQuestions;
+            
+            let csv = 'Question No,Question,Option A,Option B,Option C,Option D,Correct Option,Subject,Topic,Difficulty,Solution,PYQ Type,Year,Exam Date,Shift,Created By,Approval Status\n';
+            
+            questionsToExport.forEach(q => {
+                const row = [
+                    q.questionNo || '',
+                    `"${q.question.replace(/"/g, '""')}"`,
+                    `"${(q.options[0] || '').replace(/"/g, '""')}"`,
+                    `"${(q.options[1] || '').replace(/"/g, '""')}"`,
+                    `"${(q.options[2] || '').replace(/"/g, '""')}"`,
+                    `"${(q.options[3] || '').replace(/"/g, '""')}"`,
+                    String.fromCharCode(65 + q.correctOption),
+                    q.subject || '',
+                    q.topic || '',
+                    q.difficulty || '',
+                    `"${(q.solution || '').replace(/"/g, '""')}"`,
+                    q.pyqType || 'Not PYQ',
+                    q.year || '',
+                    q.examDate ? new Date(q.examDate).toLocaleDateString() : '',
+                    q.shift || '',
+                    q.createdBy?.username || '',
+                    q.approvalStatus || ''
+                ];
+                csv += row.join(',') + '\n';
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `questions_export_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+    }
+}
+
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (file && file.name.endsWith('.csv')) {
+    selectedFile = file;
+    document.getElementById('selectedFileName').textContent = file.name;
+    document.getElementById('importBtn').disabled = false;
+  } else {
+    alert('Please select a valid CSV file');
+    event.target.value = '';
+    selectedFile = null;
+    document.getElementById('selectedFileName').textContent = '';
+    document.getElementById('importBtn').disabled = true;
+  }
+}
+
+function downloadCSVTemplate() {
+  window.location.href = '/csv-template';
+}
+
+async function importQuestions() {
+  if (!selectedFile) {
+    alert('Please select a CSV file');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('csvFile', selectedFile);
+
+  const progressDiv = document.getElementById('importProgress');
+  const resultsDiv = document.getElementById('importResults');
+  const importBtn = document.getElementById('importBtn');
+  
+  // Show progress
+  progressDiv.style.display = 'block';
+  resultsDiv.style.display = 'none';
+  importBtn.disabled = true;
+  
+  document.getElementById('importStatus').textContent = 'Uploading and processing...';
+
+  try {
+    const response = await fetch('/bulk-import', {
+      method: 'POST',
+      body: formData
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Import failed');
+    }
+
+    // Display results
+    displayImportResults(result);
+    
+    // Reset file input
+    document.getElementById('csvFile').value = '';
+    selectedFile = null;
+    document.getElementById('selectedFileName').textContent = '';
+    
+    // Reload questions if any were successful
+    if (result.summary.successful > 0) {
+      loadQuestions();
+      if (typeof loadPendingQuestions === 'function') {
+        loadPendingQuestions();
+      }
+    }
+
+  } catch (error) {
+    console.error('Import error:', error);
+    document.getElementById('importStatus').textContent = 'Import failed: ' + error.message;
+  } finally {
+    progressDiv.style.display = 'none';
+    importBtn.disabled = false;
+  }
+}
+
+function displayImportResults(result) {
+  const resultsDiv = document.getElementById('importResults');
+  const summaryDiv = document.getElementById('importSummary');
+  const errorsDiv = document.getElementById('importErrors');
+  
+  resultsDiv.style.display = 'block';
+  
+  // Display summary
+  summaryDiv.innerHTML = `
+    <div class="import-summary">
+      <div class="summary-item success">
+        <span class="count">${result.summary.successful}</span>
+        <span class="label">Imported Successfully</span>
+      </div>
+      <div class="summary-item failed">
+        <span class="count">${result.summary.failed}</span>
+        <span class="label">Failed</span>
+      </div>
+      <div class="summary-item total">
+        <span class="count">${result.summary.total}</span>
+        <span class="label">Total Processed</span>
+      </div>
+    </div>
+  `;
+  
+  // Display errors if any
+  if (result.errors && result.errors.length > 0) {
+    errorsDiv.innerHTML = `
+      <h5>Import Errors:</h5>
+      <div class="error-list">
+        ${result.errors.map(err => `
+          <div class="error-item">
+            <strong>Row ${err.row}:</strong> ${err.error}
+            ${err.data ? `<br><small>Question: ${err.data.question || 'N/A'}</small>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } else {
+    errorsDiv.innerHTML = '';
+  }
+}
+
+function toggleBulkImportSection() {
+  const section = document.getElementById('bulkImportSection');
+  const toggleBtn = document.getElementById('bulkImportToggleBtn');
+  
+  if (section.style.display === 'none') {
+        section.style.display = 'block';
+    toggleBtn.style.display = 'none';
+  } else {
+    section.style.display = 'none';
+    toggleBtn.style.display = 'block';
+  }
+}
+
+// Update the updateUserInterface function to show bulk import button for superusers
+const originalUpdateUserInterface = updateUserInterface;
+updateUserInterface = function() {
+  originalUpdateUserInterface();
+  
+  if (currentUser.role === 'superuser' || currentUser.role === 'supremeuser') {
+    document.getElementById('bulkImportToggleBtn').style.display = 'block';
+  }
+};
+// CSV validation helper
+function validateCSVRow(row, rowNumber) {
+  const errors = [];
+  
+  // Required fields
+  if (!row.question || row.question.trim() === '') {
+    errors.push('Question is required');
+  }
+  
+  if (!row.option1 || row.option1.trim() === '') {
+    errors.push('Option 1 is required');
+  }
+  
+  if (!row.option2 || row.option2.trim() === '') {
+    errors.push('Option 2 is required');
+  }
+  
+  if (!row.option3 || row.option3.trim() === '') {
+    errors.push('Option 3 is required');
+  }
+  
+  if (!row.option4 || row.option4.trim() === '') {
+    errors.push('Option 4 is required');
+  }
+  
+  // Validate correct option
+  if (!row.correctOption) {
+    errors.push('Correct option is required');
+  } else {
+    const correct = row.correctOption.trim().toUpperCase();
+    if (!['A', 'B', 'C', 'D', '1', '2', '3', '4'].includes(correct)) {
+      errors.push('Correct option must be A-D or 1-4');
+    }
+  }
+  
+  // Validate subject
+  if (row.subject && !['Physics', 'Chemistry', 'Maths'].includes(row.subject)) {
+    errors.push('Subject must be Physics, Chemistry, or Maths');
+  }
+  
+  // Validate difficulty
+  if (row.difficulty && !['easy', 'medium', 'hard'].includes(row.difficulty.toLowerCase())) {
+    errors.push('Difficulty must be easy, medium, or hard');
+  }
+  
+  // Validate PYQ type
+  if (row.pyqType && !['Not PYQ', 'JEE MAIN PYQ'].includes(row.pyqType)) {
+    errors.push('PYQ Type must be "Not PYQ" or "JEE MAIN PYQ"');
+  }
+  
+  // Validate year if PYQ
+  if (row.pyqType === 'JEE MAIN PYQ') {
+    if (!row.year || isNaN(row.year) || row.year < 1000) {
+      errors.push('Valid year is required for JEE MAIN PYQ');
+    }
+    if (!row.shift || !['Shift 1', 'Shift 2'].includes(row.shift)) {
+      errors.push('Valid shift is required for JEE MAIN PYQ');
+    }
+  }
+  
+  return errors;
+}
 
 // Function to generate unique serial number
 async function generateUniqueSerialNumber() {
