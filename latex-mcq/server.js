@@ -1403,26 +1403,7 @@ app.post('/bulk-approve', requireSupremeUser, async (req, res) => {
     res.status(500).json({ error: 'Error in bulk approval' });
   }
 });
-// Get rejected questions (supremeuser only)
-app.get('/rejected-questions', requireAuth, async (req, res) => {
-  try {
-    let filter = { approvalStatus: 'rejected' };
-    
-    if (req.session.userRole !== 'supremeuser') {
-      filter.createdBy = req.session.userId;
-    }
-    
-    const rejectedQuestions = await MCQ.find(filter)
-      .populate('createdBy', 'username')
-      .sort({ createdAt: -1 });
-    
-    res.json(rejectedQuestions);
-  } catch (error) {
-    console.error('Error fetching rejected questions:', error);
-    res.status(500).json({ error: 'Error fetching rejected questions' });
-  }
-});
-// Bulk import questions from CSV (superuser only)
+// Get rejected questions (supremeuser only)// Bulk import questions from CSV (superuser only)
 // Bulk import questions from CSV (superuser only)
 app.post('/bulk-import', requireSuperUser, upload.single('csvFile'), async (req, res) => {
   const results = [];
@@ -1450,20 +1431,41 @@ app.post('/bulk-import', requireSuperUser, upload.single('csvFile'), async (req,
 
     // Process each question
     for (const row of questions) {
+      // Skip empty rows
+      if (!row || Object.keys(row).length === 0) {
+        continue;
+      }
+      
       processed++;
       
       try {
-        // Skip header row or rows with Sr.No.
-        if (row['Sr.No.'] === 'Sr.No.' || !row.Question) {
+        // Log the row to debug
+        console.log('Processing row:', processed, row);
+        
+        // Check if Question field exists and is not empty
+        if (!row.Question || row.Question.trim() === '') {
+          errors.push({
+            row: processed,
+            error: 'Missing question text',
+            data: row
+          });
           continue;
         }
 
-        // Validate required fields
-        if (!row.Question || !row.Option1 || !row.Option2 || !row.Option3 || !row.Option4) {
+        // Check for options - they might be numbers or strings
+        const option1 = row.Option1 !== undefined ? row.Option1.toString().trim() : '';
+        const option2 = row.Option2 !== undefined ? row.Option2.toString().trim() : '';
+        const option3 = row.Option3 !== undefined ? row.Option3.toString().trim() : '';
+        const option4 = row.Option4 !== undefined ? row.Option4.toString().trim() : '';
+
+        // Check if it's a numerical answer type (all options are empty)
+        const isNumerical = !option1 && !option2 && !option3 && !option4;
+
+        if (!isNumerical && (!option1 || !option2 || !option3 || !option4)) {
           errors.push({
             row: processed,
-            error: 'Missing required fields (question or options)',
-            data: row
+            error: 'Missing required options for MCQ',
+            question: row.Question.substring(0, 50) + '...'
           });
           continue;
         }
@@ -1471,35 +1473,42 @@ app.post('/bulk-import', requireSuperUser, upload.single('csvFile'), async (req,
         // Map CSV fields to database fields
         const questionNo = row['Sr.No.'] ? `Q${row['Sr.No.']}` : `BULK-${Date.now()}-${processed}`;
         const question = row.Question.trim();
-        const options = [
-          row.Option1.trim(),
-          row.Option2.trim(),
-          row.Option3.trim(),
-          row.Option4.trim()
-        ];
 
-        // Determine correct option (assuming it's provided as 1, 2, 3, or 4)
-        let correctOption = 0; // Default to first option
+        // Handle options based on question type
+        let options, correctOption;
         
-        // If there's a CorrectOption field in CSV
-        if (row.CorrectOption) {
-          const correctStr = row.CorrectOption.toString().trim();
-          if (/^[1-4]$/.test(correctStr)) {
-            correctOption = parseInt(correctStr) - 1;
-          } else if (/^[A-Da-d]$/.test(correctStr)) {
-            correctOption = correctStr.toUpperCase().charCodeAt(0) - 65;
-          }
+        if (isNumerical) {
+          // For numerical questions, create placeholder options
+          options = [
+            "Numerical Answer",
+            "Numerical Answer",
+            "Numerical Answer",
+            "Numerical Answer"
+          ];
+          correctOption = 0;
         } else {
-          // Try to determine from the question text or default to 0
-          // You might want to add logic here to determine the correct answer
-          correctOption = 0; // Default to first option
+          options = [option1, option2, option3, option4];
+          
+          // Determine correct option
+          correctOption = 0; // Default
+          if (row.CorrectOption) {
+            const correctStr = row.CorrectOption.toString().trim();
+            if (/^[1-4]$/.test(correctStr)) {
+              correctOption = parseInt(correctStr) - 1;
+            } else if (/^[A-Da-d]$/.test(correctStr)) {
+              correctOption = correctStr.toUpperCase().charCodeAt(0) - 65;
+            }
+          }
         }
 
         // Map difficulty
         const difficultyMap = {
           'Easy': 'easy',
           'Medium': 'medium',
-          'Hard': 'hard'
+          'Hard': 'hard',
+          'easy': 'easy',
+          'medium': 'medium',
+          'hard': 'hard'
         };
         const difficulty = difficultyMap[row.Hardness] || 'medium';
 
@@ -1509,7 +1518,8 @@ app.post('/bulk-import', requireSuperUser, upload.single('csvFile'), async (req,
           errors.push({
             row: processed,
             error: 'Duplicate question already exists',
-            srNo: row['Sr.No.']
+            srNo: row['Sr.No.'],
+            question: question.substring(0, 50) + '...'
           });
           continue;
         }
@@ -1524,11 +1534,16 @@ app.post('/bulk-import', requireSuperUser, upload.single('csvFile'), async (req,
           topic: row.Topic || 'General',
           difficulty: difficulty,
           solution: row.Solution || '',
-          pyqType: 'Not PYQ', // Default for bulk import
+          pyqType: 'Not PYQ',
           createdBy: req.session.userId,
-          approvalStatus: 'pending', // All bulk imported questions need approval
+          approvalStatus: 'pending',
           autoClassified: false
         };
+
+        // If numerical question, add note to solution
+        if (isNumerical) {
+          mcqData.solution = `[Numerical Answer Type Question]\n${mcqData.solution}`;
+        }
 
         // Save question
         const mcq = new MCQ(mcqData);
@@ -1546,7 +1561,7 @@ app.post('/bulk-import', requireSuperUser, upload.single('csvFile'), async (req,
         console.error(`Error processing row ${processed}:`, err);
         errors.push({
           row: processed,
-          srNo: row['Sr.No.'],
+          srNo: row['Sr.No.'] || 'N/A',
           error: err.message,
           question: row.Question ? row.Question.substring(0, 50) + '...' : 'N/A'
         });
