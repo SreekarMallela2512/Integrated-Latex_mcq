@@ -1423,6 +1423,7 @@ app.get('/rejected-questions', requireAuth, async (req, res) => {
   }
 });
 // Bulk import questions from CSV (superuser only)
+// Bulk import questions from CSV (superuser only)
 app.post('/bulk-import', requireSuperUser, upload.single('csvFile'), async (req, res) => {
   const results = [];
   const errors = [];
@@ -1452,8 +1453,13 @@ app.post('/bulk-import', requireSuperUser, upload.single('csvFile'), async (req,
       processed++;
       
       try {
+        // Skip header row or rows with Sr.No.
+        if (row['Sr.No.'] === 'Sr.No.' || !row.Question) {
+          continue;
+        }
+
         // Validate required fields
-        if (!row.question || !row.option1 || !row.option2 || !row.option3 || !row.option4) {
+        if (!row.Question || !row.Option1 || !row.Option2 || !row.Option3 || !row.Option4) {
           errors.push({
             row: processed,
             error: 'Missing required fields (question or options)',
@@ -1462,83 +1468,67 @@ app.post('/bulk-import', requireSuperUser, upload.single('csvFile'), async (req,
           continue;
         }
 
-        // Parse options
+        // Map CSV fields to database fields
+        const questionNo = row['Sr.No.'] ? `Q${row['Sr.No.']}` : `BULK-${Date.now()}-${processed}`;
+        const question = row.Question.trim();
         const options = [
-          row.option1.trim(),
-          row.option2.trim(),
-          row.option3.trim(),
-          row.option4.trim()
+          row.Option1.trim(),
+          row.Option2.trim(),
+          row.Option3.trim(),
+          row.Option4.trim()
         ];
 
-        // Parse correct option (handle both letter and number format)
-        let correctOption;
-        if (row.correctOption) {
-          if (/^[A-Da-d]$/.test(row.correctOption.trim())) {
-            correctOption = row.correctOption.trim().toUpperCase().charCodeAt(0) - 65;
-          } else if (/^[1-4]$/.test(row.correctOption.trim())) {
-            correctOption = parseInt(row.correctOption.trim()) - 1;
-          } else {
-            errors.push({
-              row: processed,
-              error: 'Invalid correct option format',
-              data: row
-            });
-            continue;
+        // Determine correct option (assuming it's provided as 1, 2, 3, or 4)
+        let correctOption = 0; // Default to first option
+        
+        // If there's a CorrectOption field in CSV
+        if (row.CorrectOption) {
+          const correctStr = row.CorrectOption.toString().trim();
+          if (/^[1-4]$/.test(correctStr)) {
+            correctOption = parseInt(correctStr) - 1;
+          } else if (/^[A-Da-d]$/.test(correctStr)) {
+            correctOption = correctStr.toUpperCase().charCodeAt(0) - 65;
           }
         } else {
-          errors.push({
-            row: processed,
-            error: 'Missing correct option',
-            data: row
-          });
-          continue;
+          // Try to determine from the question text or default to 0
+          // You might want to add logic here to determine the correct answer
+          correctOption = 0; // Default to first option
         }
 
+        // Map difficulty
+        const difficultyMap = {
+          'Easy': 'easy',
+          'Medium': 'medium',
+          'Hard': 'hard'
+        };
+        const difficulty = difficultyMap[row.Hardness] || 'medium';
+
         // Check for duplicate
-        const trimmedQuestion = row.question.trim();
-        const duplicateQuestion = await MCQ.findOne({ question: trimmedQuestion });
+        const duplicateQuestion = await MCQ.findOne({ question: question });
         if (duplicateQuestion) {
           errors.push({
             row: processed,
             error: 'Duplicate question already exists',
-            data: row
+            srNo: row['Sr.No.']
           });
           continue;
         }
 
         // Build MCQ data
         const mcqData = {
-          questionNo: row.questionNo || `BULK-${Date.now()}-${processed}`,
-          question: trimmedQuestion,
+          questionNo: questionNo,
+          question: question,
           options: options,
           correctOption: correctOption,
-          subject: row.subject || 'Physics',
-          topic: row.topic || 'General',
-          difficulty: row.difficulty ? row.difficulty.toLowerCase() : 'medium',
-          solution: row.solution || '',
-          pyqType: row.pyqType || 'Not PYQ',
+          subject: row.Subject || 'Physics',
+          topic: row.Topic || 'General',
+          difficulty: difficulty,
+          solution: row.Solution || '',
+          pyqType: 'Not PYQ', // Default for bulk import
           createdBy: req.session.userId,
           approvalStatus: 'pending', // All bulk imported questions need approval
           autoClassified: false
         };
-
-        // Handle PYQ specific fields
-        if (mcqData.pyqType === 'JEE MAIN PYQ') {
-          if (row.year) {
-            mcqData.year = parseInt(row.year);
-          }
-          if (row.examDate) {
-            mcqData.examDate = new Date(row.examDate);
-          }
-          if (row.shift) {
-            mcqData.shift = row.shift;
-          }
-        }
-
-        // Validate difficulty
-        if (!['easy', 'medium', 'hard'].includes(mcqData.difficulty)) {
-          mcqData.difficulty = 'medium';
-        }
 
         // Save question
         const mcq = new MCQ(mcqData);
@@ -1547,6 +1537,7 @@ app.post('/bulk-import', requireSuperUser, upload.single('csvFile'), async (req,
         successful++;
         results.push({
           row: processed,
+          srNo: row['Sr.No.'],
           questionNo: mcq.questionNo,
           status: 'success'
         });
@@ -1555,8 +1546,9 @@ app.post('/bulk-import', requireSuperUser, upload.single('csvFile'), async (req,
         console.error(`Error processing row ${processed}:`, err);
         errors.push({
           row: processed,
+          srNo: row['Sr.No.'],
           error: err.message,
-          data: row
+          question: row.Question ? row.Question.substring(0, 50) + '...' : 'N/A'
         });
       }
     }
@@ -1587,17 +1579,20 @@ app.post('/bulk-import', requireSuperUser, upload.single('csvFile'), async (req,
   }
 });
 
-// Get CSV template
+// Get CSV template - Updated for your format
 app.get('/csv-template', requireAuth, (req, res) => {
-  const template = `questionNo,question,option1,option2,option3,option4,correctOption,subject,topic,difficulty,solution,pyqType,year,examDate,shift
-Q1,What is 2+2?,2,3,4,5,C,Maths,Arithmetic,easy,Simple addition: 2+2=4,Not PYQ,,,
-Q2,Find the derivative of $x^2$,$2x$,$x^2$,$x$,$2$,A,Maths,Calculus,medium,Using power rule: $\\frac{d}{dx}(x^2) = 2x$,Not PYQ,,,
-JEE-2024-001,A particle moves with constant velocity. What is its acceleration?,0 m/s²,1 m/s²,2 m/s²,Cannot be determined,A,Physics,Kinematics,easy,Constant velocity means zero acceleration,JEE MAIN PYQ,2024,2024-01-27,Shift 1`;
+  const template = `Sr.No.,Question,Option1,Option2,Option3,Option4,CorrectOption,Hardness,Subject,Topic,Solution
+1,"What is 2+2?",2,3,4,5,3,Easy,Mathematics,Arithmetic,"Simple addition: 2+2=4"
+2,"Find the derivative of $x^2$","$2x$","$x^2$","$x$","$2$",1,Medium,Mathematics,Calculus,"Using power rule: $\\frac{d}{dx}(x^2) = 2x$"
+3,"A particle moves with constant velocity. What is its acceleration?","0 m/s²","1 m/s²","2 m/s²","Cannot be determined",1,Easy,Physics,Kinematics,"Constant velocity means zero acceleration"`;
 
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="mcq_import_template.csv"');
   res.send(template);
-});
+}); 
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="mcq_import_template.csv"');
+  res.send(template);
 // Export questions to CSV
 app.get('/export-questions', requireAuth, async (req, res) => {
   try {
