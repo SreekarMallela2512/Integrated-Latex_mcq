@@ -1605,9 +1605,7 @@ app.get('/csv-template', requireAuth, (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename="mcq_import_template.csv"');
   res.send(template);
 }); 
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', 'attachment; filename="mcq_import_template.csv"');
-  res.send(template);
+ 
 // Export questions to CSV
 app.get('/export-questions', requireAuth, async (req, res) => {
   try {
